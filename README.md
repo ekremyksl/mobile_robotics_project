@@ -12,10 +12,10 @@
 ## Inputs and Outputs of the Steps
 ### 1. Visualization
 #### I: Request to map everything (scan, take a picture)
-#### O: --list of positions as [x, y] (start, goal, obstacle edges) [x_th, x_goal, edge_1, edge_2, .... edge_n]
+#### O: --list of positions as [x, y] (start, goal, obstacle edges) [x_th, x_goal, edge_1, edge_2, .... edge_n] 
 ####    --Graph: Matrix with "nodes" corresponding to list indices
 ### 2. Global Navigation
-#### I: list of positions [(x_start, y_start), (x_goal, y_goal), (x1, y1),.... (xn, yn)]
+#### I: list of positions [(x_start, y_start), (x_goal, y_goal), (x1, y1),.... (xn, yn)] and matrix like in Networked Control Systems
 ##### ->calculate distances for each reachable node
 ##### ->calculate optimal path
 #### O: optimal path: list of nodes [(x1, y1),.... (xn, yn)]
