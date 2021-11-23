@@ -27,5 +27,9 @@
 #### I: Optimal path, state estimation
 #### O: Motor Wheel Speed
 
-
-z
+## Milestones
+### 1. Milestone (30.11.21)
+#### Everyone has an individual simple solution. Verify that all interfaces are working.
+### 2. Milestone (07.12.21)
+#### Everyone has a running solution and tested it with dummy information. Then, we merge all parts and test it. Start writing report.
+### Project hand in (12.12.21)
