@@ -12,11 +12,11 @@ import cv2.aruco
 
 class Vision:
     AUTOTUNE_THRESHOLD_AREA = 10000
-    AUTOTUNE_THRESHOLD_STEP_SIZE = 40
+    AUTOTUNE_THRESHOLD_STEP_SIZE = 50
 
     def __init__(self, video_source=0):
         self.vid = cv.VideoCapture(0)
-        self.threshold = 50
+        self.threshold = 48
         self.obstacle = MultiPolygon
 
 
@@ -53,7 +53,18 @@ class Vision:
         potential_segments = []
         for obstacle_polygon in polygons: 
             self.obstacle = self.obstacle.union(obstacle_polygon)
+            """
+            Reduces performance without benefit
+
+
+            inter = self.obstacle.intersection(obstacle_polygon)
+            if not inter.is_empty:
+                if isinstance(inter, Polygon):
+                    potential_wp = potential_wp + list(np.asarray(np.dstack(tuple(inter.exterior.xy)))[0])
+                else:
+                    potential_wp = potential_wp + list(np.asarray(np.dstack(tuple(inter.xy)))[0])
             potential_wp = potential_wp + list(np.asarray(np.dstack(tuple(obstacle_polygon.exterior.xy)))[0])
+            """
         for line_candidate in combinations(potential_wp,2):
             print(line_candidate)
             test_line = LineString([line_candidate[0], line_candidate[1]])
@@ -65,10 +76,7 @@ class Vision:
         return potential_segments
 
     def shapelyXYtoCVLine(xy_tuple):
-        to_draw = np.dstack(xy_tuple)
-        to_draw = np.asarray(to_draw.astype(int))
-        to_draw = np.asarray(to_draw)
-
+        return [np.asarray(np.dstack(xy_tuple).astype(int))]
     def autoTuneThreshold(self, verbose:bool=False)-> bool:
         img = self.acquireImg()
         print(type(img))
@@ -111,14 +119,16 @@ if __name__ == "__main__":
         img = v.applyPreprocessing(img_orig)
         polygons = v.getContourPolygons(img)
         potential_segments = v.visibilityGraph(polygons)
-        img = vstack([255*np.ones([*img.shape]), img,cv.cvtColor(img_orig, cv.COLOR_RGB2GRAY)])
-        plt.imshow(img,cmap="gray")
-        for polygon in polygons:
-            plt.plot(*polygon.exterior.xy,'r',2)
-        for potential_segment in potential_segments:
-            plt.plot(*potential_segment.xy,'b',1)
         
-        plt.show()
+        #plt.imshow(img,cmap="gray")
+        for polygon in polygons:
+            #plt.plot(*polygon.exterior.xy,'r',2)
+            cv.drawContours(img_orig, Vision.shapelyXYtoCVLine(tuple(polygon.exterior.xy)), -1,(255,0,0), 2)
+        for potential_segment in potential_segments:
+            cv.drawContours(img_orig, Vision.shapelyXYtoCVLine(tuple(potential_segment.xy)), -1,(0,255,0), 1)
+            #plt.plot(*potential_segment.xy,'b',1)
+        img = vstack([cv.cvtColor(img, cv.COLOR_GRAY2RGB), img_orig])
+        cv.imshow('Image', img)
         cv.waitKey(50)
 
 
