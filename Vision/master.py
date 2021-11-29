@@ -8,17 +8,31 @@ from shapely.geometry.base import CAP_STYLE, JOIN_STYLE
 from itertools import combinations
 import matplotlib.pyplot  as plt
 from shapely.geometry.multipoint import MultiPoint
-import cv2.aruco
+import cv2.aruco as aruco
+import yaml
+import os
 
 class Vision:
     AUTOTUNE_THRESHOLD_AREA = 10000
     AUTOTUNE_THRESHOLD_STEP_SIZE = 40
+    GROUND_X_RANGE_M = 0.5
+    GROUND_Y_RANGE_M = 0.7
 
     def __init__(self, video_source=0):
-        self.vid = cv.VideoCapture(0)
-        self.threshold = 50
-        self.obstacle = MultiPolygon
+        #self.vid = cv.VideoCapture(0)
+        self.vid = cv.VideoCapture(0,cv.CAP_DSHOW)
+        self.vid.set(cv.CAP_PROP_FRAME_WIDTH, 1920)
+        self.vid.set(cv.CAP_PROP_FRAME_HEIGHT, 1080)
 
+        self.threshold = 50
+        self.obstacle = MultiPolygon()
+        self.warp_transform = None
+        with open("calibration.yaml", "r") as calib_file:
+            self.camera_calibration = yaml.load(calib_file)
+        assert isinstance(self.camera_calibration, dict)
+        assert set(self.camera_calibration.keys()) == {"distortion", "matrix"}
+        self.camera_calibration["matrix"] = np.array(self.camera_calibration["matrix"])
+        self.camera_calibration["distortion"] = np.array(self.camera_calibration["distortion"])
 
     def applyPreprocessing(self, src:np.ndarray) -> np.ndarray:
         img = cv.cvtColor(src, cv.COLOR_RGB2GRAY)
@@ -29,14 +43,80 @@ class Vision:
         ret, img = cv.threshold(img,self.threshold,255,cv.THRESH_BINARY)
         return cv.morphologyEx(img, cv.MORPH_OPEN, np.ones((15,15),np.uint8))
 
-    def acquireImg(self):
+    def acquireImg(self, undistort=True):
         ret, img = self.vid.read()
         if not ret:
             print("Error reading source!")
 
             return None
         else:
-            return img
+            if undistort:
+                return cv.undistort(img, self.camera_calibration["matrix"], self.camera_calibration["distortion"])
+            else:
+                return img
+
+    def extractWarp(self, img, markersize=4, remove_border_aruco=True):
+        gray = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
+        aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_50)
+        parameters =  aruco.DetectorParameters_create()
+        corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+        if ids is None or 0 not in ids or 1 not in ids or 2 not in ids or 3 not in ids:
+            print("Could not find all 4 boundary markers")
+            return False, None
+        corner_dict = {int(id): [sum([corner[0] for corner in cornerset[0]]) / len(cornerset[0]), sum([corner[1] for corner in cornerset[0]]) / len(cornerset[0])] for (id, cornerset) in zip(ids, corners)}
+        corner_pts = []
+        for i in range(4):
+            corner_pts.append(corner_dict[i])
+        corner_pts = np.asarray(corner_pts).astype(int)
+        w = int(max(corner_dict.values(), key=lambda x: x[0])[0] - min(corner_dict.values(), key=lambda x: x[0])[0])
+        h = int(Vision.GROUND_Y_RANGE_M * w / Vision.GROUND_X_RANGE_M)
+        self.warp_transform = {"tf": cv.getPerspectiveTransform(
+                corner_pts.astype(np.float32),
+                np.float32([[0,h], [w,h],[w,0], [0,0]])
+            ), "wh":(w,h)}
+        if remove_border_aruco:
+            for corner, id in zip(corners, ids):
+                if id == 0 or id == 1 or id == 2 or id == 3:
+                    cv.fillConvexPoly(img, corner[0].astype(int), (255, 255, 255))
+        return True, img
+
+    def applyWarp(self, img):
+        assert self.warp_transform is not None
+        return cv.warpPerspective(img,self.warp_transform["tf"],self.warp_transform["wh"])
+
+    def transformPixelXY(self, coords, pixel_to_xy):
+        if pixel_to_xy:
+            return [
+                coords[0] * Vision.GROUND_X_RANGE_M / self.warp_transform["wh"][0],
+                coords[1] * Vision.GROUND_Y_RANGE_M / self.warp_transform["wh"][1]
+                ]
+        else:
+            return [
+                coords[0] * self.warp_transform["wh"][0] / Vision.GROUND_X_RANGE_M,
+                coords[1] * self.warp_transform["wh"][1] / Vision.GROUND_Y_RANGE_M
+                ]
+
+    def findThymio(self, img, marker_id = 4, remove_border_aruco=True):
+        gray = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
+        gray = cv.equalizeHist(gray)
+        aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_1000)
+        parameters =  aruco.DetectorParameters_create()
+        corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+        if ids is not None and ids[0] == 4:
+            thymio_borders_px = corners[0][0]
+        else:
+            print("Cannot identify Thymio in image!",ids)
+            return False, None, None
+        if remove_border_aruco:
+            cv.fillConvexPoly(img, np.array(thymio_borders_px).astype(int), (255, 255, 255))
+        thymio_borders_m = []
+        for thymio_border_px in thymio_borders_px:
+            thymio_borders_m.append(self.transformPixelXY(thymio_border_px, True))
+        thymio_pose = [sum([corner[0] for corner in thymio_borders_m]) / len(thymio_borders_m), sum([corner[1] for corner in thymio_borders_m]) / len(thymio_borders_m)]
+        thymio_pose[1] = Vision.GROUND_Y_RANGE_M - thymio_pose[1]
+        driving_direction = thymio_borders_px[1] - thymio_borders_px[0]
+        thymio_pose.append(np.rad2deg(np.arctan2(driving_direction[1], driving_direction[0])))
+        return True, img, thymio_pose
 
     def getContourPolygons(self,src:np.ndarray) -> list[Polygon]:
         contours, hierarchy = cv.findContours(src, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
@@ -107,7 +187,21 @@ if __name__ == "__main__":
     print("AT")
     while True:
         img_orig = v.acquireImg()
+        ret, img = v.extractWarp(img_orig)
+        if not ret:
+            continue
+        img = v.applyWarp(img)
+        cv.imshow("img", img)
+        if cv.waitKey(10) == ord("q"):
+            break
+        ret, img, pos = v.findThymio(img)
+        if not ret:
+            continue
+        print(pos)
         
+
+
+        continue
         img = v.applyPreprocessing(img_orig)
         polygons = v.getContourPolygons(img)
         potential_segments = v.visibilityGraph(polygons)
