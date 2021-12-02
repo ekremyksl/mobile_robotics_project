@@ -1,0 +1,19 @@
+
+THYMIO_PARAMS=dict(
+    #PHYSICAL PARAMETERS
+    WHEEL_RAD = 4.5,
+    WHEEL_LENGTH = 11.3,
+    MAX_SPEED = 500,
+    SAMPLING_TIME = 0.001
+)
+
+ASTOLFI_PARAM=dict(
+    K_RHO = 1,
+    K_ALPHA =  15,
+    K_BETA = -1.5
+)
+
+THRESHOLDS=dict(
+    OBJ_AVOIDANCE = 500,
+    ON_NODE = 0.001
+)
