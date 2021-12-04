@@ -3,6 +3,7 @@
 import math
 import time
 import numpy as np
+from tdmclient import ClientAsync, aw
 from kalman_calc import KalmanCalc
 from repeated_timer import RepeatedTimer
 from plot_map import PlotMap
@@ -13,7 +14,7 @@ class KalmanFilter():
         self.node = node
 
         self.period = period # fiter updating period
-        self.thymio_width = 10 # distance from wheel to wheel of thymio
+        self.thymio_width = 9.5 # distance from wheel to wheel of thymio
 
         # state estimation vector: [position x, position y, velocity x, velocity y, angle, angular velocity]
         self.x = np.array(state_vector)
@@ -21,10 +22,6 @@ class KalmanFilter():
         # estimation uncertainty matrix (covariance matrix) of position and angle
         self.Pxy = np.array(position_uncertainty)
         self.Pangle = np.array(angle_uncertainty)
-
-        # memorize past state vectors and covariance matrices
-        self.x_list = []
-        self.Pxy_list = []
 
         # positional measurement flag (if set then update kalman filter including positional measurement)
         self.m_pos_flag = False
@@ -35,53 +32,60 @@ class KalmanFilter():
         self.kalman_pose = KalmanCalc()
         self.kalman_position = KalmanCalc()
 
-        # self.speed_list = [[5,5],[5,5],[5,5],[5,5],[5,5],[5,5]]
+        self.speed_list = [[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],
+                            [5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],
+                            [5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5],[5,5]]
         # self.speed_list = [[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
         #               [18,22],[18,22],[18,22],[18,22],[18,22],[20,20],[20,20],[20,20],[20,20]]
         # self.speed_list = [[20,20],[20,20],[20,20],[10,30],[10,30],[10,30],[10,30],[10,30],[10,30],[20,20],[20,20],[20,20]]
-        self.speed_list = [[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],\
-                            [7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],\
-                            [7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],\
-                            [7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],\
-                            [7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
-                            [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20]]
-        
+        # self.speed_list = [[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],\
+        #                     [7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],\
+        #                     [7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],\
+        #                     [7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],\
+        #                     [7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[7.,3.],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],\
+        #                     [20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20],[20,20]]
+
+    def set_position_measurement(self, position):
+        self.m_pos = np.array(position)
+        self.m_pos_flag = True
+
     def get_state_vector(self):
         return self.x
 
-    def get_state_vector_list(self):
-        return self.x_list
-
-    def get_covariance_list(self):
-        return self.Pxy_list       
+    def get_position_covariance(self):
+        return self.Pxy       
 
     def update_filter(self):        
         speed = self._measure_speed()
 
         self._estimate_pose(speed)
         self._estimate_position(speed)
-        
-        self.x_list.append(list(self.x))
-        self.Pxy_list.append(self.Pxy)
+
+        if self.m_pos_flag:
+            self.m_pos_flag = False
 
         # print("{} a:\t{}".format(i,np.round(self.pose, 2)))
         print("x:\t{}".format(np.round(self.x, 2)))
-        # print("{} s:\t{}".format(i,speed))
+        print("s:\t{}".format(np.round(speed, 1)))
         # print("{} z:\t{}".format(i,z))
 
 
     def _measure_speed(self):
         if self.node != 0:
-            return [self.node["motor.left.speed"], self.node["motor.right.speed"]]
+            correction_factor = 1.2
+            aw(self.node.wait_for_variables())
+            left = (16/500)*self.node["motor.left.speed"]*correction_factor
+            right = (16/500)*self.node["motor.right.speed"]*correction_factor
+            return [left, right]
         else:
             return self.speed_list.pop(0)
 
@@ -121,15 +125,15 @@ class KalmanFilter():
         #               [0,0.1,0,0,], 
         #               [0,0,0.2,0,],
         #               [0,0,0,0.2]])
-        r_speed = 40
-        std_x = math.sqrt(self.period*abs(math.cos(self.x[4]))*r_speed)
-        std_y = math.sqrt(self.period*abs(math.sin(self.x[4]))*r_speed)
-        std_vx = math.sqrt(abs(math.cos(self.x[4]))*r_speed)
-        std_vy = math.sqrt(abs(math.sin(self.x[4]))*r_speed)
-        # Q = np.array([[std_x*std_x,std_x*std_y,0,0], 
-        #               [std_x*std_y,std_y*std_y,0,0], 
-        #               [0,0,std_vx*std_vx,std_vx*std_vy,],
-        #               [0,0,std_vx*std_vy,std_vy*std_vy]])
+        process_var = 1
+        std_x = math.sqrt(self.period*abs(math.cos(self.x[4]))*process_var)
+        std_y = math.sqrt(self.period*abs(math.sin(self.x[4]))*process_var)
+        std_vx = math.sqrt(abs(math.cos(self.x[4]))*process_var)
+        std_vy = math.sqrt(abs(math.sin(self.x[4]))*process_var)
+        # Q = np.array([[std_x*std_x,std_x*std_y,std_x*std_vx,std_y*std_vx], 
+        #               [std_x*std_y,std_y*std_y,std_x*std_vy,std_y*std_vy], 
+        #               [std_x*std_vx,std_y*std_vx,std_vx*std_vx,std_vx*std_vy,],
+        #               [std_x*std_vy,std_y*std_vy,std_vx*std_vy,std_vy*std_vy]])
         Q = np.array([[std_x*std_x,0,0,0], 
                       [0,std_y*std_y,0,0], 
                       [0,0,std_vx*std_vx,0],
@@ -143,15 +147,15 @@ class KalmanFilter():
                             [0,0,0,1]])
 
         # measurement noise matrix
-        measure_noise = 10 # variance of speed measurement
+        measure_noise = 5 # variance of speed measurement
         std_mx = math.sqrt(abs(math.cos(self.x[4]))*measure_noise)
         std_my = math.sqrt(abs(math.sin(self.x[4]))*measure_noise)
         R_speed = np.array([[std_mx*std_mx,std_mx*std_my],
                             [std_mx*std_my,std_my*std_my]])
         # R_speed = np.array([[0.05,0.05],
         #                     [0.05,0.05]])
-        R_pos = np.array([[measure_noise,0],
-                          [0,measure_noise]])
+        R_pos = np.array([[0.01,0],
+                          [0,0.01]])
 
         H, R = self._concernate_matrices(H_pos, H_speed, R_pos, R_speed)
         
@@ -163,16 +167,16 @@ class KalmanFilter():
                       [0,1]])
 
         # process noise matrix
-        Q = np.array([[0.04,0], 
-                      [0,0.04]])
+        Q = np.array([[0.05,0], 
+                      [0,0.05]])
 
         # observation matrix
         H_pos = np.array([[1,0]])
         H_speed = np.array([[0,1]])
 
         # measurement noise matrix
-        R_speed = np.array([[0.01]])
-        R_pos = np.array([[0.01]])
+        R_speed = np.array([[0.1]])
+        R_pos = np.array([[0.001]])
 
         H, R = self._concernate_matrices(H_pos, H_speed, R_pos, R_speed)
         return F, Q, H, R
@@ -194,27 +198,38 @@ if __name__ == '__main__':
     v = 5
     vx = math.cos(angle)*v
     vy = math.sin(angle)*v
-
-    state_vector = [0,0,vx,vy, angle,0]
-    position_uncertainty = [[0.1,0,0,0],
+    state_vector = np.array([[0,0,vx,vy, angle,0]])
+    position_uncertainty = np.array([[[0.1,0,0,0],
                             [0,0.1,0,0],
                             [0,0,0,0],
-                            [0,0,0,0]]
-    angle_uncertainty = [[0,0],
-                         [0,0]]
+                            [0,0,0,0]]])
+    angle_uncertainty = np.array([[0,0],
+                         [0,0]])
 
     # no thymio is used
     node = 0
+    
+
     period = 0.1
-
-
-    filter = KalmanFilter(node, period, state_vector, position_uncertainty, angle_uncertainty)
+    filter = KalmanFilter(node, period, state_vector[0], position_uncertainty[0], angle_uncertainty)
     t1 = RepeatedTimer(period, filter.update_filter)
 
+
     t1.start()
-    time.sleep(10) 
+    for i in range(3):
+        time.sleep(1) 
+        state_vector = np.append(state_vector, [filter.get_state_vector()], axis=0)
+        position_uncertainty = np.append(position_uncertainty, [filter.get_position_covariance()], axis=0)
+
+        t1.stop()
+        print(state_vector[i+1])
+        x_pos = float(input("enter x position: "))
+        y_pos = float(input("enter y_position: "))
+        angle = float(input("enter angle: "))
+        filter.set_position_measurement([x_pos, y_pos, angle])
+        t1.start()
+
     t1.stop()
 
-    print(filter.get_covariance_list())
 
-    PlotMap(period, filter.get_state_vector_list(), filter.get_covariance_list())
+    PlotMap(period, state_vector, position_uncertainty)

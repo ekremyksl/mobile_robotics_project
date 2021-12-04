@@ -41,15 +41,16 @@ class PlotMap():
             stds = np.sqrt(np.absolute(eigenvalues))
             uncertainty.append(stds[0])
 
-            if i % math.ceil(1/(self.period*2)) != 0:
-                continue
-
             ell = Ellipse(xy=(position[0], position[1]),width=stds[0]*2, height=stds[1]*2, \
                                 angle=np.rad2deg(np.arctan2(eigenvectors[1, 0],eigenvectors[0,0])), edgecolor="r")
             ell.set_facecolor('none')
             ax[0].add_patch(ell)
 
-            #thymio_coord = self._rotate(position[4],self.thymio_rel_coord)
+            # # plot entire Thymio
+            # thymio_coord = self._rotate(position[4],self.thymio_rel_coord)
+            # ax[0].plot(position[0]+thymio_coord[:,0], position[1]+thymio_coord[:,1], color="b")
+
+            # plot only center point of Thymio
             ax[0].scatter(position[0], position[1], color="b")
         
         ax[1].plot(uncertainty)
