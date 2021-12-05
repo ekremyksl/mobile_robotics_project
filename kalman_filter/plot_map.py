@@ -37,11 +37,11 @@ class PlotMap():
 
         uncertainty = []
         for i, position in enumerate(position_list):
-            eigenvalues, eigenvectors = np.linalg.eig(cov_list[i])
-            stds = np.sqrt(np.absolute(eigenvalues))
-            uncertainty.append(stds[0])
+            eigenvalues, eigenvectors = np.linalg.eig(cov_list[i,0:2,0:2])
+            stds2 = 2*np.sqrt(np.absolute(eigenvalues))
+            uncertainty.append(np.amax(stds2))
 
-            ell = Ellipse(xy=(position[0], position[1]),width=stds[0]*2, height=stds[1]*2, \
+            ell = Ellipse(xy=(position[0], position[1]),width=stds2[0], height=stds2[1], \
                                 angle=np.rad2deg(np.arctan2(eigenvectors[1, 0],eigenvectors[0,0])), edgecolor="r")
             ell.set_facecolor('none')
             ax[0].add_patch(ell)

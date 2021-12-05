@@ -28,30 +28,31 @@ if __name__ == '__main__':
     vr = 2
     vx = math.cos(angle)*(vl+vr)/2
     vy = math.sin(angle)*(vl+vr)/2
-    state_vector = np.array([[0,0,vx,vy, angle,0]])
-    position_uncertainty = np.array([[[0,0,0,0],
-                            [0,0,0,0],
-                            [0,0,0,0],
-                            [0,0,0,0]]])
-    angle_uncertainty = np.array([[0,0],
-                            [0,0]])
+    va = (vr-vl)/9.4
+    state_vector = np.array([[0,0,angle,vx,vy,va]], dtype=float)
+    uncertainty_matrix = np.array([[[0.1,0,0,0,0,0],
+                                    [0,0.1,0,0,0,0],
+                                    [0,0,0.1,0,0,0],
+                                    [0,0,0,0,0,0],
+                                    [0,0,0,0,0,0],
+                                    [0,0,0,0,0,0]]], dtype=float)
 
     period = 0.1
-    filter = KalmanFilter(node, period, state_vector[0], position_uncertainty[0], angle_uncertainty)
+    filter = KalmanFilter(node, period, state_vector[0], uncertainty_matrix[0])
     t1 = RepeatedTimer(period, filter.update_filter)
 
     t1.start()
     aw(node.set_variables(motors(vl,vr)))
-    for i in range(16):
+    for i in range(18):
         time.sleep(1) 
         state_vector = np.append(state_vector, [filter.get_state_vector()], axis=0)
-        position_uncertainty = np.append(position_uncertainty, [filter.get_position_covariance()], axis=0)
+        uncertainty_matrix = np.append(uncertainty_matrix, [filter.get_covariance_matrix()], axis=0)
 
         # calc. second std: probability is more than 95% that robot is inside second std
-        eigenvalues, _ = np.linalg.eig(position_uncertainty[i+1])
-        stds2 = np.sqrt(2*np.absolute(eigenvalues))
+        eigenvalues, _ = np.linalg.eig(uncertainty_matrix[i+1])
+        stds2 = 2*np.sqrt(np.absolute(eigenvalues))
 
-        if np.amax(stds2) > 4:
+        if np.amax(stds2) > 3:
             aw(node.set_variables(motors(0,0)))
             t1.stop()
             print("second stds: {}".format(stds2))
@@ -62,28 +63,25 @@ if __name__ == '__main__':
             t1.start()
             aw(node.set_variables(motors(vl,vr)))
 
-        if i == 4:
+        if i == 2:
             vl = 1
             vr = 3
             aw(node.set_variables(motors(vl,vr)))
 
-        if i == 8:
+        if i == 4:
+            vl = 2
+            vr = 2
+            aw(node.set_variables(motors(vl,vr)))
+
+        if i == 6:
             vl = 3
             vr= 1
             aw(node.set_variables(motors(vl,vr)))
-
-        if i == 12:
-            vl = 2
-            vr= 2
-            aw(node.set_variables(motors(vl,vr)))
-
-
-
         
     aw(node.set_variables(motors(0,0)))
     t1.stop()
 
 
-    PlotMap(period, state_vector, position_uncertainty)
+    PlotMap(period, state_vector, uncertainty_matrix)
 
     
