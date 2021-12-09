@@ -43,7 +43,7 @@ if __name__ == '__main__':
 
     t1.start()
     aw(node.set_variables(motors(vl,vr)))
-    for i in range(18):
+    for i in range(16):
         time.sleep(1) 
         state_vector = np.append(state_vector, [filter.get_state_vector()], axis=0)
         uncertainty_matrix = np.append(uncertainty_matrix, [filter.get_covariance_matrix()], axis=0)
@@ -63,19 +63,24 @@ if __name__ == '__main__':
             t1.start()
             aw(node.set_variables(motors(vl,vr)))
 
-        if i == 2:
+        if i == 4:
             vl = 1
             vr = 3
             aw(node.set_variables(motors(vl,vr)))
 
-        if i == 4:
+        if i == 6:
             vl = 2
             vr = 2
             aw(node.set_variables(motors(vl,vr)))
 
-        if i == 6:
+        if i == 10:
             vl = 3
             vr= 1
+            aw(node.set_variables(motors(vl,vr)))
+
+        if i == 12:
+            vl = 2
+            vr = 2
             aw(node.set_variables(motors(vl,vr)))
         
     aw(node.set_variables(motors(0,0)))
