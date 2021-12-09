@@ -66,19 +66,21 @@ class Astolfi:
             self.on_goal = True
         
 
-    def set_path(self,traj,verbose=False):
+    def set_path(self,traj,angle,verbose=False):
         j=1
         path = []
-        path.append([traj[0][0], traj[0][1], 0])
+        path.append([traj[0][1], -traj[0][0], angle])
 
         while j < len(traj):
             pos1=traj[j]
             pos2=traj[j-1]
             temp=[pos1[0]-pos2[0],pos1[1]-pos2[1]]
-            ang=m.atan2(temp[1],temp[0])
-            path.append([pos1[0], pos1[1], ang])
+            ang=m.atan2(-temp[1],temp[1])
+            path.append([pos1[0], -pos1[1], ang])
             j+=1    
+        path.append([pos1[0], -pos1[1], ang])
         self.path=np.array(path) 
+        self.path=self.path
         self.set_goal(self.path[self.next_index])
         if verbose: print(self.path)      
 

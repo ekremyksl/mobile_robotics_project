@@ -42,19 +42,20 @@ class SimpleController:
     def get_curr(self):
         return self.curr
 
-    def set_global(self,traj):
+    def set_global(self,traj,angle):
         global_path = []
-        global_path.append([traj[0][0], traj[0][1], 0])
+        global_path.append([traj[0][0], -traj[0][1], angle])
         j=1
         while j<len(traj):
            pos1=traj[j]
            pos2=traj[j-1]
            temp=[pos1[0]-pos2[0],pos1[1]-pos2[1]]
-           ang=math.atan2(temp[1],temp[0])
-           global_path.append([pos1[0], pos1[1], ang])
+           ang=math.atan2(-temp[1],temp[0])
+           global_path.append([pos1[0], -pos1[1], ang])
            j+=1
-        
+        global_path.append([pos1[0], -pos1[1], ang])
         self.global_path=np.array(global_path)
+        self.global_path=self.global_path
         self.check_node()
 
     def check_node(self):
@@ -88,18 +89,33 @@ class SimpleController:
     def normalize_ang(self,angle):   #ensuring theta is between pi and -pi
         return math.atan2(math.sin(angle),math.cos(angle))
 
-    def correct_heading(self):
+    def correct_heading(self,th):
         print('correcting heading')
-        while abs(self.curr[2]-self.next[2]) > self.heading_th:
-            self.set_speed(150,-150)
-            self.run_on_thymio(self.th)
-            #finding angle each iteration
-            dq=self.wheel_radius/(2*self.wheel_length)*(self.phiL-self.phiR)
-            self.curr[2]+=dq*self.Ts/2
-            self.curr[2]=self.normalize_ang(self.curr[2])
+
+        # dt = (self.next[2]-self.curr[2])*self.wheel_length*5/16.7
+        # if dt is not 0:
+        #    th.set_var("motor.left.target", 100)
+        #    th.set_var("motor.right.target", 2**16-100)
+        
+        # time.sleep(abs(dt))
+        while abs(self.next[2]-self.curr[2]) > self.heading_th:
+            if self.next[2]-self.curr[2] > self.heading_th:
+                self.set_speed(150,-150)
+                self.run_on_thymio(self.th)
+                #finding angle each iteration
+                dq=self.wheel_radius/(2*self.wheel_length)*(self.phiL-self.phiR)/self.cm2thym
+                self.curr[2]+=dq*self.Ts/2
+                self.curr[2]=self.normalize_ang(self.curr[2])
+            else:
+                self.set_speed(-150,150)
+                self.run_on_thymio(self.th)
+                #finding angle each iteration
+                dq=self.wheel_radius/(2*self.wheel_length)*(self.phiL-self.phiR)/self.cm2thym
+                self.curr[2]+=dq*self.Ts/2
+                self.curr[2]=self.normalize_ang(self.curr[2])
             self.update_pos()
-            print(self.curr)    
-            time.sleep(self.Ts*5)
+            # print(self.curr)    
+            time.sleep(self.Ts)
         print('heading corrected')
         self.set_speed(0,0)
         self.run_on_thymio(self.th)
@@ -131,16 +147,16 @@ class SimpleController:
             self.set_speed(250,250)
             self.run_on_thymio(self.th)
             #finding positions each iteration
-            vel=self.wheel_radius*(self.phiL+self.phiR)/2
+            vel=self.wheel_radius*(self.phiL+self.phiR)/(2*self.cm2thym)
             dx=vel*math.cos(self.curr[2])
             dy=vel*math.sin(self.curr[2])
             self.curr[0]+=dx*self.Ts/2
             self.curr[1]+=dy*self.Ts/2
             self.update_pos()
-            print(self.curr)
+            # print(self.curr)
             #finding distance for next iteration
             dist = self.compute_dist(self.next,self.curr)
-            time.sleep(self.Ts*5)
+            time.sleep(self.Ts)
         print('following line completed')
         self.set_speed(0,0)
         self.run_on_thymio(self.th)
