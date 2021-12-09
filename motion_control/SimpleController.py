@@ -39,6 +39,9 @@ class SimpleController:
     def set_curr(self,curr):
         self.curr=curr
 
+    def get_curr(self):
+        return self.curr
+
     def set_global(self,traj):
         global_path = []
         global_path.append([traj[0][0], traj[0][1], 0])
@@ -50,13 +53,18 @@ class SimpleController:
            ang=math.atan2(temp[1],temp[0])
            global_path.append([pos1[0], pos1[1], ang])
            j+=1
+        
         self.global_path=np.array(global_path)
+        self.check_node()
 
     def check_node(self):
-        if self.node_index<len(self.global_path)-1:
+        
+        if self.node_index<len(self.global_path)-1:            
             self.node_index+=1
             self.set_goal(self.global_path[self.node_index])
+            print('simp is proceeding to next node',self.next)
         else:
+            print('goal reached by simp')
             self.on_goal=True
 
     def goalReached(self):
@@ -64,6 +72,9 @@ class SimpleController:
 
     def set_goal(self,next):
         self.next=next
+
+    def get_goal(self):
+        return self.next
 
     def set_speed(self, lspeed, rspeed):
         self.phiL = lspeed
@@ -88,7 +99,7 @@ class SimpleController:
             self.curr[2]=self.normalize_ang(self.curr[2])
             self.update_pos()
             print(self.curr)    
-            time.sleep(self.Ts*10)
+            time.sleep(self.Ts*5)
         print('heading corrected')
         self.set_speed(0,0)
         self.run_on_thymio(self.th)
@@ -116,7 +127,7 @@ class SimpleController:
     def follow_line(self):
         print('following line')
         dist = self.compute_dist(self.next,self.curr)
-        while dist > self.dist_th:
+        while dist > self.dist_th and dist <= 4:
             self.set_speed(250,250)
             self.run_on_thymio(self.th)
             #finding positions each iteration
@@ -129,7 +140,7 @@ class SimpleController:
             print(self.curr)
             #finding distance for next iteration
             dist = self.compute_dist(self.next,self.curr)
-            time.sleep(self.Ts*10)
+            time.sleep(self.Ts*5)
         print('following line completed')
         self.set_speed(0,0)
         self.run_on_thymio(self.th)

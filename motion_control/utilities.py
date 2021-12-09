@@ -6,18 +6,18 @@ THYMIO_PARAMS=dict(
     MAX_SPEED_CM = 10,
     MAX_SPEED = 250,
     SAMPLING_TIME = 0.001,
-    SPEED_CM2THYM = 20
+    SPEED_CM2THYM = 250/10
 )
 
 ASTOLFI_PARAM=dict(
-    K_RHO = 0.1,
-    K_ALPHA =  0.5,
-    K_BETA = -0.1
+    K_RHO = 20,
+    K_ALPHA =  30,
+    K_BETA = -0.5
 )
 
 THRESHOLDS=dict(
     OBJ_AVOIDANCE = 500,
-    ON_NODE = 0.1
+    ON_NODE = 0.3
 )
 
 HEADING=dict(
@@ -27,7 +27,7 @@ HEADING=dict(
 )
 
 SIMPLE_CONT=dict(
-    DISTANCE_THRESHOLD = 1,
-    HEADING_THRESHOLD = 0.03
+    DISTANCE_THRESHOLD = 0.5,
+    HEADING_THRESHOLD = 0.1
 )
 
