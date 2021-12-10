@@ -5,6 +5,7 @@ import utilities as ut
 from Thymio import Thymio
 import time
 import serial
+from tdmclient import ClientAsync, aw
 
 class Astolfi:
 
@@ -69,19 +70,19 @@ class Astolfi:
     def set_path(self,traj,angle,verbose=False):
         j=1
         path = []
-        path.append([traj[0][1], -traj[0][0], angle])
+        path.append([traj[0][1], traj[0][0], angle])
 
         while j < len(traj):
             pos1=traj[j]
             pos2=traj[j-1]
             temp=[pos1[0]-pos2[0],pos1[1]-pos2[1]]
-            ang=m.atan2(-temp[1],temp[1])
-            path.append([pos1[0], -pos1[1], ang])
+            ang=m.atan2(temp[1],temp[1])
+            path.append([pos1[0], pos1[1], ang])
             j+=1    
-        path.append([pos1[0], -pos1[1], ang])
-        self.path=np.array(path) 
+        path.append([pos1[0], pos1[1], ang])
+        self.path=np.array(path) / 10
         self.path=self.path
-        self.set_goal(self.path[self.next_index])
+        self.set_goal(self.path[1])
         if verbose: print(self.path)      
 
     def delt(self, pos1, pos2):
@@ -115,8 +116,8 @@ class Astolfi:
 
         omega = self.Ka*self.alpha + self.Kb*self.beta
 
-        self.phiL = (vel + omega*self.wheel_length)/self.wheel_radius
-        self.phiR = (vel - omega*self.wheel_length)/self.wheel_radius
+        self.phiL = ((vel + omega*self.wheel_length)/self.wheel_radius)
+        self.phiR = ((vel - omega*self.wheel_length)/self.wheel_radius)
 
         # self.phiL, self.phiR = self.scale(self.phiL, self.phiR )
 
@@ -156,7 +157,12 @@ class Astolfi:
 
         left, right = self.speed4thymio(left,right)
 
-        th.set_var("motor.left.target", left)
-        th.set_var("motor.right.target", right)
+        # th.set_var("motor.left.target", left)
+        # th.set_var("motor.right.target", right)
+        aw(th.set_variables(self.motors(left,right)))
+
+    def motors(left, right):
+        return { "motor.left.target": [left], "motor.right.target": [right] }
+
 
 

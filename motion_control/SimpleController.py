@@ -1,9 +1,11 @@
+from cv2 import sqrt
 import numpy as np
 import math
 import time
 import utilities as ut
 import serial
 import Thymio
+from tdmclient import ClientAsync, aw
 
 class SimpleController:
 
@@ -44,27 +46,32 @@ class SimpleController:
 
     def set_global(self,traj,angle):
         global_path = []
-        global_path.append([traj[0][0], -traj[0][1], angle])
+        global_path.append([traj[0][0], traj[0][1], angle])
         j=1
         while j<len(traj):
            pos1=traj[j]
            pos2=traj[j-1]
            temp=[pos1[0]-pos2[0],pos1[1]-pos2[1]]
-           ang=math.atan2(-temp[1],temp[0])
-           global_path.append([pos1[0], -pos1[1], ang])
+           ang=math.atan2(temp[1],temp[0])
+           global_path.append([pos1[0], pos1[1], ang])
            j+=1
-        global_path.append([pos1[0], -pos1[1], ang])
-        self.global_path=np.array(global_path)
+        global_path.append([pos1[0], pos1[1], ang])
+        self.global_path=np.array(global_path)/10
         self.global_path=self.global_path
         self.check_node()
 
     def check_node(self):
         
-        if self.node_index<len(self.global_path)-1:            
+        if self.node_index==0: 
+            self.node_index+=1
+            self.set_goal(self.global_path[self.node_index])
+        delt = self.global_path[self.node_index]-self.curr
+        dist = math.sqrt(delt[0]**2+delt[1]**2)        
+        if self.node_index<len(self.global_path)-1 and dist < 4:            
             self.node_index+=1
             self.set_goal(self.global_path[self.node_index])
             print('simp is proceeding to next node',self.next)
-        else:
+        elif self.node_index < len(self.path)-1:
             print('goal reached by simp')
             self.on_goal=True
 
@@ -89,9 +96,27 @@ class SimpleController:
     def normalize_ang(self,angle):   #ensuring theta is between pi and -pi
         return math.atan2(math.sin(angle),math.cos(angle))
 
-    def correct_heading(self,th):
-        print('correcting heading')
+    def correct_heading(self,error,fkine=False,verbose=False):
 
+        if verbose: print('correcting heading')
+        if abs(error) > np.pi / 6:
+            spd = 3
+        else:
+            spd = 1
+        if error < self.heading_th:
+                self.set_speed(spd,-spd)
+        else:
+                self.set_speed(-spd,spd)    
+        if fkine:
+                dq=self.wheel_radius/(2*self.wheel_length)*(self.phiL-self.phiR)/self.cm2thym
+                self.curr[2]+=dq*self.Ts/2
+                self.curr[2]=self.normalize_ang(self.curr[2])
+
+        if verbose: print('heading corrected')
+        
+        return self.phiL,self.phiR
+                
+        
         # dt = (self.next[2]-self.curr[2])*self.wheel_length*5/16.7
         # if dt is not 0:
         #    th.set_var("motor.left.target", 100)
@@ -103,17 +128,19 @@ class SimpleController:
                 self.set_speed(150,-150)
                 self.run_on_thymio(self.th)
                 #finding angle each iteration
-                dq=self.wheel_radius/(2*self.wheel_length)*(self.phiL-self.phiR)/self.cm2thym
-                self.curr[2]+=dq*self.Ts/2
-                self.curr[2]=self.normalize_ang(self.curr[2])
+                if fkine:
+                    dq=self.wheel_radius/(2*self.wheel_length)*(self.phiL-self.phiR)/self.cm2thym
+                    self.curr[2]+=dq*self.Ts/2
+                    self.curr[2]=self.normalize_ang(self.curr[2])
             else:
                 self.set_speed(-150,150)
                 self.run_on_thymio(self.th)
                 #finding angle each iteration
-                dq=self.wheel_radius/(2*self.wheel_length)*(self.phiL-self.phiR)/self.cm2thym
-                self.curr[2]+=dq*self.Ts/2
-                self.curr[2]=self.normalize_ang(self.curr[2])
-            self.update_pos()
+                if fkine:
+                    dq=self.wheel_radius/(2*self.wheel_length)*(self.phiL-self.phiR)/self.cm2thym
+                    self.curr[2]+=dq*self.Ts/2
+                    self.curr[2]=self.normalize_ang(self.curr[2])
+            # self.update_pos()
             # print(self.curr)    
             time.sleep(self.Ts)
         print('heading corrected')
@@ -129,8 +156,12 @@ class SimpleController:
         #left,right = self.check_limits(left,right)
         left,right = self.spd4thym(self.phiL,self.phiR)
 
-        th.set_var("motor.left.target", left)
-        th.set_var("motor.right.target", right)
+        # th.set_var("motor.left.target", left)
+        # th.set_var("motor.right.target", right)
+        aw(th.set_variables(self.motors(left,right)))
+
+    def motors(left, right):
+        return { "motor.left.target": [left], "motor.right.target": [right] }
 
     def compute_dist(self,next,curr):
         delta = [next[0]-curr[0],next[1]-curr[1]]
@@ -140,19 +171,32 @@ class SimpleController:
     def update_pos(self):
         self.pos.append([self.curr[0],self.curr[1], self.curr[2]])
 
-    def follow_line(self):
-        print('following line')
+    def follow_line(self,dist,error,fkine=False,verbose=False):
+
+        if verbose: print('following line')
+        corr = error / self.heading_th * 1
+        print(corr)
+        if dist > self.dist_th:
+            spd = 3
+            self.set_speed(spd-corr,spd+corr)
+        else:
+            self.set_speed(0,0)
+        if verbose: print('following line completed')
+
+        return self.phiL, self.phiR
+        
         dist = self.compute_dist(self.next,self.curr)
         while dist > self.dist_th and dist <= 4:
             self.set_speed(250,250)
-            self.run_on_thymio(self.th)
-            #finding positions each iteration
-            vel=self.wheel_radius*(self.phiL+self.phiR)/(2*self.cm2thym)
-            dx=vel*math.cos(self.curr[2])
-            dy=vel*math.sin(self.curr[2])
-            self.curr[0]+=dx*self.Ts/2
-            self.curr[1]+=dy*self.Ts/2
-            self.update_pos()
+            # self.run_on_thymio(self.th)
+            if fkine:
+                #finding positions each iteration
+                vel=self.wheel_radius*(self.phiL+self.phiR)/(2*self.cm2thym)
+                dx=vel*math.cos(self.curr[2])
+                dy=vel*math.sin(self.curr[2])
+                self.curr[0]+=dx*self.Ts/2
+                self.curr[1]+=dy*self.Ts/2
+                self.update_pos()
             # print(self.curr)
             #finding distance for next iteration
             dist = self.compute_dist(self.next,self.curr)
