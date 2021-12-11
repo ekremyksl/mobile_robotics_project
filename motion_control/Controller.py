@@ -18,13 +18,13 @@ class Controller:
         curr_pos : current position, as initial it taken as (0,0,0) indicating (x,y,q)
         '''   
         self.on_goal = False
-        self.node_index = 0
+        self.node_index = 0     #flag to keep track of the index of next goal position
 
         self.rho = 0
         self.alpha = 0
         self.beta = 0
 
-        self.state = 'PASS'
+        self.state = 'PASS'     #initial state of Thymio
 
         #entering initial parameters
         self.wheel_radius = ut.THYMIO_PARAMS['WHEEL_RAD']          #wheel radius of thymio [cm]
@@ -53,6 +53,7 @@ class Controller:
     def set_goal(self,next):
         self.next=next
 
+    #differenc vector (P2-P1)
     def delt(self, pos1, pos2):
         return np.array([pos2[0]-pos1[0],pos2[1]-pos1[1]])
 
@@ -82,25 +83,9 @@ class Controller:
         right = int((500/16)*right)
         return { "motor.left.target": [left], "motor.right.target": [right] }
 
-
-    def run_on_thymio(self,th):
-        ''' give values to the motors of the thymio'''
-        # left  = int(self.phiL * self.cm2thym)
-        # right = int(self.phiR * self.cm2thym)
-
-        # left,right = self.check_limits(left,right)
-        # left,right = self.spd4thym(self.phiL,self.phiR)
-
-        # th.set_var("motor.left.target", left)
-        # th.set_var("motor.right.target", right)
-        # aw(th.set_variables(self.motors(left,right)))
-       
-
     #checks if next goal or even global goal is reached
     def check_node(self, verbose=False):
         #to initialize the next node
-        # if self.node_index==0: print(self.norm(self.path[1]-self.path[0]))
-        # else: print(self.norm(self.path[self.node_index]-self.curr))
         if self.node_index == 0:
             self.curr = self.path[0]
             self.node_index = 1
@@ -118,10 +103,19 @@ class Controller:
     #process the optimal trajectory coming from global navigation
     #list of nodes [(x,y),..] is given and functions converts it to
     #np.array with the third element, angle of the line between nodes np.array((x,y,q))
-    def set_global(self,traj,angle,verbose=False):
+    def set_global(self,traj,angle,conversion='mm2cm',verbose=False):
+        #depending on unit of pixel to cm, mm, or else
+        if conversion == 'mm2cm' or conversion == 'cm2m':
+            conversion_coeff = 0.1
+        elif conversion == 'm2cm':
+            conversion_coeff = 100
+        elif conversion == 'cm2m':
+            conversion_coeff = 0.01
+        else:  #else it is assumed to be cm2cm
+            conversion_coeff = 1
 
         path = []
-        path.append([traj[0][0], traj[0][1], angle])
+        path.append([traj[0][0], traj[0][1], angle])    #adding the first node to path (initial position of Thymio )
         
         j=1
         while j < len(traj):
@@ -132,87 +126,62 @@ class Controller:
             j+=1
         #adding the last node as dummy node
         path.append([traj[-1][0], traj[-1][1], ang])
-        self.path = np.array(path) / 10 #converting from mm to cm
+        self.path = np.array(path) * conversion_coeff 
         if verbose: print('Global Trajectory:', self.path)
-        # self.check_node()
+        #adding next goal
         self.next = self.path[1]
         self.node_index = 1
 
-    
+    #if orientation error, alpha is not within [-pi/2, pi/2] , then we first rotate robot to avoid
+    # undesired motion of Astolfi controller   
     def correct_heading(self,fkine=False,verbose=False):
 
         if verbose: print('correcting heading')
-        print(self.curr[2])
-
+        #depending on orientation error (alpha), deciding the rotation direction
         if self.alpha > 0:
             omega = 1
         else: 
             omega = -1
+        #linear velocity is zero since we only want it to turn around robot frame
         vel = 0
         #wheel speeds in [cm/s]
+        # assigning wheel speeds        
         self.phiL = ((vel - omega*self.wheel_length)/self.wheel_radius)
         self.phiR = ((vel + omega*self.wheel_length)/self.wheel_radius)
 
-        return self.phiL,self.phiR
-
-        # else:
-        #     spd = 1
-        # if error > self.heading_th:
-        #         self.set_speed(spd,-spd)
-        # else:
-        #         self.set_speed(-spd,spd)    
-        # if fkine:
-        #         dq=self.wheel_radius/(2*self.wheel_length)*(self.phiL-self.phiR)
-        #         self.curr[2]+=dq*self.Ts/2
-        #         self.curr[2]=self.normalize_ang(self.curr[2])
-
-        # if verbose and error < abs(error)< self.heading_th: print('heading corrected')
-        
-        
-
-    def follow_line(self,dist,error,fkine=False,verbose=False):
-
-        if verbose: print('following line')
-        corr = error / self.heading_th * 1
-        corr *=0
-        # print(corr)
-        if dist > self.on_node:
-            spd = 3
-            self.set_speed(spd-corr,spd+corr)
-        else:
-            self.set_speed(0,0)
-        if verbose: print('following line completed')
-
-        return self.phiL, self.phiR
+        return self.phiL,self.phiR        
 
     #polar coordinates for astolfi controller
     def polar_rep(self):
 
         delta = self.delt(self.curr,self.next)        
-        self.rho = self.norm(delta)
-        self.alpha = self.normalize_ang(-self.curr[2] + m.atan2(delta[1],delta[0]))
-        self.beta = self.normalize_ang(-self.alpha-self.curr[2]-self.next[2])
+        self.rho = self.norm(delta)                                                     #rho = sqrt(dx^2+dy^2)
+        self.alpha = self.normalize_ang(-self.curr[2] + m.atan2(delta[1],delta[0]))     #alpha = atan2(dy,dx)-theta
+        self.beta = self.normalize_ang(-self.alpha-self.curr[2]-self.next[2])           #beta = -theta-alpha-beta_ref  where beta_ref is the angle of approach to the next node [as next[2]]
 
         return self.rho, self.alpha, self.beta
 
     def compute_phi_dot(self, fkine=False, verbose=False):
-
+        #computing rho, alpha, beta
         self.polar_rep()
         if verbose: print('Astolfi Controller')
-        vel = self.Kr
+        vel = self.Kr                                   #for constant linear speed
         omega = self.Ka*self.alpha + self.Kb*self.beta
-        omega /=(self.rho)
+        omega /=(self.rho)                              #normalizing omega with rho for constant linear speed
 
         #wheel speeds in [cm/s]
-        self.phiL = ((vel - omega*self.wheel_length)/self.wheel_radius)
+        #using inverse kinematics  to obtain wheel speeds using the relation
+        #vel = (left+right)*(r/2)
+        #omega = (-left+right)*(r/2l)
+
+        self.phiL = ((vel - omega*self.wheel_length)/self.wheel_radius)     
         self.phiR = ((vel + omega*self.wheel_length)/self.wheel_radius)
 
-        # self.phiL, self.phiR = self.scale(self.phiL, self.phiR )
-
+        #saturating the input variables to ensure safety of motors
         self.phiL = self.saturate(self.phiL,self.max_speed_cms)
         self.phiR = self.saturate(self.phiR,self.max_speed_cms)
 
-        #in case no estimator is used, this part enables controller to be used by itself
+        #in case no estimator (Kalman Filter) is used, this part enables controller to be used by itself
         if fkine:
             q_dot = omega
             v=(self.phiL+self.phiR)*self.wheel_radius/2
@@ -228,44 +197,39 @@ class Controller:
 
     def motion_control(self, node, astolfi=False, verbose=False, fkine=False):
 
-        orientation_error = self.normalize_ang(self.next[2]-self.curr[2] + m.pi) 
-        dist = self.norm(self.curr-self.next)
         self.polar_rep()
 
         state = 'HEADING'
         if verbose:
-            print('Orientation error is:', orientation_error)
-            print('Distance from the next node is:', dist)
+            print('Orientation error is:', self.alpha)
+            print('Distance from the next node is:', self.rho)
         #deciding the state of the robot
         #should it correct heading
-        if abs(self.alpha) > m.pi/3:
-            state = 'HEADING' 
-        #should it follow line if it is close to node
-        elif False and abs(orientation_error) <= self.heading_th and dist < self.dist_th and dist > self.on_node:
-            state = 'FOLLOW LINE'
+        if abs(self.alpha) > 0.95*(m.pi/2): #Astolfi is able to control it if alpha is in [-pi/2,pi/2]
+            state = 'HEADING'               #but as a safety margin, we take 0.95(pi/2) as threshold for heading correction
         #or should it follow the trajectory with Astolfi
         elif abs(self.alpha) and astolfi is not False:
             state = 'ASTOLFI' 
+        #or do nothing and stop the robot at the moment for safety 
         else:
             state = 'PASS'
 
-        
-        print('ALPHA İS ALPHA,:', self.alpha)
-        print(state)
-
+        if verbose: print('Current State is', state)
+        #depending on the state, determine the action of robot
         if state == 'HEADING':
             vl,vr = self.correct_heading(fkine=fkine,verbose=verbose)
-        elif state == 'FOLLOW LINE':
-            vl,vr = self.follow_line(dist,orientation_error,fkine=fkine,verbose=verbose)
         elif state == 'ASTOLFI':
             vl,vr = self.compute_phi_dot(fkine=fkine,verbose=verbose)
         else:
-            vl=1
-            vr=1
+            vl=0
+            vr=0
 
+        #send inputs to Thymio
         aw(node.set_variables(self.motors(vl,vr)))
+        #check if next goal or even global goal is reached
         self.check_node()
 
+#debuggin or running by itself
 if __name__ == '__main__':
         
         trajectory = [(0.0,0.0), (50.0,40.0), (70.0,80.0),(0.0, 80.0), (0.0, 0.0)]        
