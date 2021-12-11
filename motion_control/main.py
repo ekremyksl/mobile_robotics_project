@@ -2,7 +2,6 @@ from matplotlib.pyplot import plot
 import matplotlib.pyplot as plt
 from numpy.lib.type_check import imag
 from Vision import Vision
-
 import math
 import numpy as np
 import time
@@ -11,8 +10,6 @@ from kalman_filter import KalmanFilter
 from repeated_timer import RepeatedTimer
 from plot_map import PlotMap
 import cv2 as cv
-from AstolfiController import Astolfi
-from SimpleController import SimpleController
 from Controller import Controller
 
 def measure(self):
@@ -20,24 +17,6 @@ def measure(self):
         self._data["time"].append(time.time()) # save timestamp
         self._data["ground_prox"].append(list(self._node["prox.ground.reflected"]))
 
-def motors(left, right):
-    left = int((500/16)*left)
-    right = int((500/16)*right)
-    return { "motor.left.target": [left], "motor.right.target": [right] }
-
-def thymioPosePipeline(v:Vision):
-    while True:
-        for i in range(10):
-            img_orig = v.acquireImg(True)
-        img_orig = cv.resize(img_orig, (1920, 1080))
-        ret, img, warp = v.extractWarp(img_orig)
-        if not ret:
-            print("Could not find all 4 markers")
-            continue
-        img = v.applyWarp(img, warp)
-        ret, _, pos = v.findThymio(img, 4, remove_thymio="marker")
-        if ret:
-            return [pos[0] / 10, pos[1] / 10, pos[2]], img
 
 if __name__ == '__main__':
     # set up connection to thymio, if node=0 no thymio is connected
@@ -45,23 +24,22 @@ if __name__ == '__main__':
     node = aw(client.wait_for_node())
     aw(node.lock())
     v = Vision(1)
-    pose, image = thymioPosePipeline(v)
+    pose, image = v.getThymioPose()
 
     # initialization of controller
     cont = Controller()
     #preparing global path
     flag = False
     while flag==False:
-        temp = v.prepareWaypoints()
+        temp = v.getTrajectory()
         if temp is not None:
             angle = temp[0]
             trajectory = temp[1]
             flag = True
 
-    # trajectory = [[300,200],[800,200],[300,200],[200,200]]
-    # setting global path
 
-    cont.set_global(trajectory,cont.normalize_ang(np.deg2rad(angle)),verbose=True)
+    # setting global path
+    cont.set_global(trajectory, cont.normalize_ang(np.deg2rad(angle)),conversion='cm2cm',verbose=True)
     # set up kalman filter
     angle = np.deg2rad(pose[2])
     vl = 2
@@ -83,10 +61,10 @@ if __name__ == '__main__':
     t1 = RepeatedTimer(period, filter.update_filter)
 
     t1.start()
-    aw(node.set_variables(motors(vl,vr)))
+    aw(node.set_variables(cont.motors(vl,vr)))
     i=0
     state = 'TURN'
-    aw(node.set_variables(motors(0,0)))
+    aw(node.set_variables(cont.motors(0,0)))
     pos=[]
     while cont.on_goal==False:
         time.sleep(0.2) 
@@ -100,27 +78,16 @@ if __name__ == '__main__':
         curr = filter.get_state_vector().copy()
         curr[2]=cont.normalize_ang(curr[2])
         cont.set_curr(curr[0:3].copy())
-        temp.append([curr])
-        # #to test with dummy trajectory
-        # if i==0: 
-        #     temp=[[curr[0],curr[1]]]
-        #     j=0
-        #     while len(temp)<len(trajectory)+1:
-        #         temp.append(trajectory[j])
-        #         j+=1
-        #     cont.set_global(temp,np.deg2rad(angle),verbose=True)
 
-       
-        print('***********',cont.next, cont.curr)
         cont.motion_control(node, fkine=False ,astolfi=True, verbose=True)
 
     
         
         if np.amax(stds2) > 3:
-            aw(node.set_variables(motors(0,0)))
+            aw(node.set_variables(cont.motors(0,0)))
             t1.stop()
             print("taking picture at {}".format(i))
-            pose, _ = thymioPosePipeline(v)
+            pose, _ = v.getThymioPose(v)
 
 
             print("second stds: {}".format(stds2))
@@ -131,13 +98,13 @@ if __name__ == '__main__':
             print(pose)
             filter.set_position_measurement(pose)
             t1.start()
-            aw(node.set_variables(motors(vl,vr)))
+            aw(node.set_variables(cont.motors(vl,vr)))
 
         pos.append(cont.curr)
         i+=1
         
     temp=np.array(temp)
-    aw(node.set_variables(motors(0,0)))
+    aw(node.set_variables(cont.motors(0,0)))
     print('****GOAL IS REACHED****')
     t1.stop()
     path=cont.path
@@ -145,8 +112,7 @@ if __name__ == '__main__':
     plt.subplots()
     plt.plot(path[:,0], path[:,1],'r*')
     plt.plot(path[:,0], path[:,1],'r--')
-    plt.plot(pos[:,0],pos[:,1],'b')
-    
+    plt.plot(pos[:,0],pos[:,1],'b')    
     PlotMap(period, state_vector, uncertainty_matrix, image, [int(Vision.GROUND_X_RANGE_MM / 10), int(Vision.GROUND_Y_RANGE_MM / 10)])
     plt.show()
     

@@ -13,16 +13,18 @@ import yaml
 import os
 import time
 from a_star import dijkstra
+
 class Vision:
-    AUTOTUNE_THRESHOLD_AREA = 10000
-    AUTOTUNE_THRESHOLD_STEP_SIZE = 10
-    GROUND_X_RANGE_MM = 1050
-    GROUND_Y_RANGE_MM = 480
+    GROUND_X_RANGE_MM = 1450
+    GROUND_Y_RANGE_MM = 700
+    BINARIZATION_THRESHOLD = 40
     THYMIO_HEIGHT_MM = 65
     THYMIO_LENGTH_MM = 130
     THYMIO_WIDTH_MM = 130
     THYMIO_MARKER_DISTANCE_BACK_MM = 40
 
+    AUTOTUNE_THRESHOLD_AREA = 10000
+    AUTOTUNE_THRESHOLD_STEP_SIZE = 10
 
     def __init__(self, video_source:int=0):
         #self.vid = cv.VideoCapture(0)
@@ -31,7 +33,7 @@ class Vision:
         self.vid.set(cv.CAP_PROP_FRAME_HEIGHT, 1080)
 
 
-        self.threshold = 60
+        self.threshold = Vision.BINARIZATION_THRESHOLD
         self.obstacle = MultiPolygon()
         self.warp_transform = None
         with open("D:\EPFL\Basics of Mobile Robotics\mobile_robotics_project\motion_control\calibration.yaml", "r") as calib_file:
@@ -161,6 +163,10 @@ class Vision:
         potential_segments = []
         for obstacle_polygon in polygons: 
             self.obstacle = self.obstacle.union(obstacle_polygon)
+            new_wps = list(np.asarray(np.dstack(tuple(obstacle_polygon.exterior.xy)))[0])
+            for new_wp in new_wps:
+                if new_wp[0] > 0 and new_wp[0] < Vision.GROUND_X_RANGE_MM and new_wp[1] > 0  and new_wp[1] < Vision.GROUND_Y_RANGE_MM:
+                    potential_wp.append(new_wp)
             potential_wp = potential_wp + list(np.asarray(np.dstack(tuple(obstacle_polygon.exterior.xy)))[0])
         if goal_pose is not None:
             potential_wp =  potential_wp + [np.asarray(goal_pose[:2])]
@@ -251,53 +257,58 @@ class Vision:
         cv.destroyAllWindows()
         return True
 
-    def prepareWaypoints(self):
-        img_orig = self.acquireImg(True)
-        img_orig = cv.resize(img_orig, (1920, 1080))
+    def getTrajectory(self):
+        while True:
+            # Empty pipeline and ignore bad images
+            for _ in range(5):
+                img_orig = self.acquireImg(True)
+            img_orig = cv.resize(img_orig, (1920, 1080))
+            ret, img, warp = self.extractWarp(img_orig)
+            if not ret:
+                continue
+            img = self.applyWarp(img, warp)
+            ret, img, pos = self.findThymio(img, 4, remove_thymio="marker")
+            if not ret:
+                print("No thymio")
+                continue
+            ret, img, pos_g = self.findGoal(img)
+            if not ret:
+                print("No goal")
+                continue
+            img_2 = self.applyPreprocessing(img)
+            polygons = self.getContourPolygons(img_2, buffer_mm = 150)
+            _,adj_matrix,polypoints = self.visibilityGraph(polygons, thymio_pose=pos, goal_pose=pos_g)
+            try:
+                adj_matrix1 = np.copy(adj_matrix)
+                polypoints1 = np.copy(polypoints)
+                points = dijkstra(adj_matrix1, polypoints1)
+            except Exception as e:
+                print("Could not find optimal path!")
+                continue
+            return points
+    
+    def getThymioPose(self):
+        while True:
+            for _ in range(5):
+                img_orig = self.acquireImg(True)
+            img_orig = cv.resize(img_orig, (1920, 1080))
+            ret, img, warp = self.extractWarp(img_orig)
+            if not ret:
+                print("Could not find all 4 markers")
+                continue
+            img = self.applyWarp(img, warp)
+            ret, _, pos = self.findThymio(img, 4, remove_thymio="marker")
+            if ret:
+                return [pos[0] / 10, pos[1] / 10, pos[2]], img
 
-        ret, img, warp =self.extractWarp(img_orig)
-        if not ret:
-            print('Cannot detect all markers')
-            return None
-
-        img =self.applyWarp(img, warp)
-
-        ret, img, pos =self.findThymio(img, 4, remove_thymio="marker")
-        if not ret:
-            print('Cannot detect Thymio')
-            return None
-        ret, img, pos_g =self.findGoal(img)
-        if not ret:
-            print('Cannot detect goal')
-            return None
-
-
-
-
-        #print(pos)
-
-        img_2 =self.applyPreprocessing(img)
-        polygons =self.getContourPolygons(img_2, buffer_mm = 250)
-        potential_segments,adj_matrix,polypoints =self.visibilityGraph(polygons, thymio_pose=pos, goal_pose=pos_g)
-
-        try:
-            adj_matrix1 = np.copy(adj_matrix)
-            polypoints1 = np.copy(polypoints)
-            points = dijkstra(adj_matrix1, polypoints1)
-            return [pos[2], points]
-        except Exception as e:
-            print("Could not find optimal path!")
-            return None
-            
 if __name__ == "__main__":
     v = Vision(1)
     for i in range(10):
         v.acquireImg()
         time.sleep(0.3)
-    #v.autoTuneThreshold(verbose=True)
+   # v.autoTuneThreshold(verbose=True)
     
     print("AT")
-    
     while True:
         img_orig = v.acquireImg(True)
         img_orig = cv.resize(img_orig, (1920, 1080))
@@ -307,8 +318,8 @@ if __name__ == "__main__":
             continue
 
         img = v.applyWarp(img, warp)
-       # cv.imshow("IMG",img)
-        #cv.waitKey(0)
+        cv.imshow("IMG",img)
+        cv.waitKey(0)
         ret, img, pos = v.findThymio(img, 4, remove_thymio="marker")
         if not ret:
             continue
@@ -322,7 +333,7 @@ if __name__ == "__main__":
         #print(pos)
         
         img_2 = v.applyPreprocessing(img)
-        polygons = v.getContourPolygons(img_2, buffer_mm = 70)
+        polygons = v.getContourPolygons(img_2, buffer_mm = 100)
         potential_segments,adj_matrix,polypoints = v.visibilityGraph(polygons, thymio_pose=pos, goal_pose=pos_g)
         
         try:

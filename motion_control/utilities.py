@@ -16,7 +16,8 @@ ASTOLFI_PARAM=dict(
 )
 
 THRESHOLDS=dict(
-    OBJ_AVOIDANCE = 500,
+    OBSTACLE_TH_LOW = 10,
+    OBSTACLE_TH_HIGH = 20,
     ON_NODE = 9
 )
 

@@ -38,7 +38,8 @@ class Controller:
         self.on_node = ut.THRESHOLDS['ON_NODE']
         self.heading_th = ut.SIMPLE_CONT['HEADING_THRESHOLD']  #sensory threshold for obstacle avoidance
         self.dist_th    = ut.SIMPLE_CONT['DISTANCE_THRESHOLD']             #threshold to determine if we are on the node
- 
+        self.obst_th_low = ut.THRESHOLDS['OBSTACLE_TH_LOW']     #obstacle lower threshold 
+        self.obst_th_high = ut.THRESHOLDS['OBSTACLE_TH_HIGH']   #obstacle high threshold
 
         #setting astolfi gains
         self.Kr = ut.ASTOLFI_PARAM['K_RHO']
@@ -195,34 +196,64 @@ class Controller:
         if verbose: print('wheel speeds are:',self.phiL,self.phiR)
         return self.phiL, self.phiR
 
+    def get_sensoryprox(self):
+        aw(node.wait_for_variables({"prox.horizontal"}))
+        obst = [node["prox.horizontal"][0], node["prox.horizontal"][4]]
+
+        return obst
+
+    def obstacle_aviodance(self,obst):
+        speed0 = 100
+        obstSpeedGain = 5
+
+        leds_top = [30,30,30]
+        # obstacle avoidance: accelerate wheel near obstacle
+        vl = (speed0 + obstSpeedGain * (obst[0] // 100)) / 16
+        vr = (speed0 + obstSpeedGain * (obst[1] // 100)) / 16
+
+        return vl,vr
+
     def motion_control(self, node, astolfi=False, verbose=False, fkine=False):
 
         self.polar_rep()
+        obst = self.get_sensoryprox()
 
-        state = 'HEADING'
+        self.state = 'PASS'
         if verbose:
             print('Orientation error is:', self.alpha)
             print('Distance from the next node is:', self.rho)
         #deciding the state of the robot
+
+        if self.state != 'AVOIDANCE': 
+            # switch from goal tracking to obst avoidance if obstacle detected
+            if (obst[0] > self.obst_th_high) or (obst[1] > self.obst_th_high) :
+                self.state = 'AVOIDANCE'
+        elif self.state == 'AVOIDANCE':
+            if obst[0] < self.obst_th_low and obst[1] < self.obst_th_low:
+                # switch from obst avoidance to goal tracking if obstacle got unseen
+                self.state = 'PASS' 
         #should it correct heading
-        if abs(self.alpha) > 0.95*(m.pi/2): #Astolfi is able to control it if alpha is in [-pi/2,pi/2]
-            state = 'HEADING'               #but as a safety margin, we take 0.95(pi/2) as threshold for heading correction
+        elif abs(self.alpha) > 0.95*(m.pi/2): #Astolfi is able to control it if alpha is in [-pi/2,pi/2]
+            self.state = 'HEADING'               #but as a safety margin, we take 0.95(pi/2) as threshold for heading correction
         #or should it follow the trajectory with Astolfi
         elif abs(self.alpha) and astolfi is not False:
-            state = 'ASTOLFI' 
+            self.state = 'ASTOLFI' 
         #or do nothing and stop the robot at the moment for safety 
         else:
-            state = 'PASS'
+            self.state = 'PASS'
 
-        if verbose: print('Current State is', state)
+        if verbose: print('Current State is', self.state)
         #depending on the state, determine the action of robot
-        if state == 'HEADING':
+        if self.state == 'AVOIDANCE':
+            vl,vr = self.obstacle_aviodance(obst)
+        elif self.state == 'HEADING':
             vl,vr = self.correct_heading(fkine=fkine,verbose=verbose)
-        elif state == 'ASTOLFI':
+        elif self.state == 'ASTOLFI':
             vl,vr = self.compute_phi_dot(fkine=fkine,verbose=verbose)
         else:
-            vl=0
-            vr=0
+            vl=0.5
+            vr=0.5
+
 
         #send inputs to Thymio
         aw(node.set_variables(self.motors(vl,vr)))
