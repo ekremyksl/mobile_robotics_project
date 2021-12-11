@@ -14,15 +14,16 @@ import os
 import time
 from a_star import dijkstra
 class Vision:
-    AUTOTUNE_THRESHOLD_AREA = 10000
-    AUTOTUNE_THRESHOLD_STEP_SIZE = 10
     GROUND_X_RANGE_MM = 1050
     GROUND_Y_RANGE_MM = 480
+    BINARIZATION_THRESHOLD = 40
     THYMIO_HEIGHT_MM = 65
     THYMIO_LENGTH_MM = 130
     THYMIO_WIDTH_MM = 130
     THYMIO_MARKER_DISTANCE_BACK_MM = 40
 
+    AUTOTUNE_THRESHOLD_AREA = 10000
+    AUTOTUNE_THRESHOLD_STEP_SIZE = 10
 
     def __init__(self, video_source:int=0):
         #self.vid = cv.VideoCapture(0)
@@ -31,7 +32,7 @@ class Vision:
         self.vid.set(cv.CAP_PROP_FRAME_HEIGHT, 1080)
 
 
-        self.threshold = 40
+        self.threshold = Vision.BINARIZATION_THRESHOLD
         self.obstacle = MultiPolygon()
         self.warp_transform = None
         with open("G:\Meine Ablage\Basics_of_mobile_robotics\Vision\calibration.yaml", "r") as calib_file:
@@ -254,11 +255,11 @@ class Vision:
                 cv.waitKey(10)
         cv.destroyAllWindows()
         return True
-        
+
     def getTrajectory(self):
         while True:
             # Empty pipeline and ignore bad images
-            for i in range(5):
+            for _ in range(5):
                 img_orig = self.acquireImg(True)
             img_orig = cv.resize(img_orig, (1920, 1080))
             ret, img, warp = self.extractWarp(img_orig)
@@ -284,6 +285,20 @@ class Vision:
                 print("Could not find optimal path!")
                 continue
             return points
+    
+    def getThymioPose(self):
+        while True:
+            for _ in range(5):
+                img_orig = self.acquireImg(True)
+            img_orig = cv.resize(img_orig, (1920, 1080))
+            ret, img, warp = self.extractWarp(img_orig)
+            if not ret:
+                print("Could not find all 4 markers")
+                continue
+            img = self.applyWarp(img, warp)
+            ret, _, pos = self.findThymio(img, 4, remove_thymio="marker")
+            if ret:
+                return [pos[0] / 10, pos[1] / 10, pos[2]], img
 
 if __name__ == "__main__":
     v = Vision(1)
