@@ -254,6 +254,37 @@ class Vision:
                 cv.waitKey(10)
         cv.destroyAllWindows()
         return True
+        
+    def getTrajectory(self):
+        while True:
+            # Empty pipeline and ignore bad images
+            for i in range(5):
+                img_orig = self.acquireImg(True)
+            img_orig = cv.resize(img_orig, (1920, 1080))
+            ret, img, warp = self.extractWarp(img_orig)
+            if not ret:
+                continue
+            img = self.applyWarp(img, warp)
+            ret, img, pos = self.findThymio(img, 4, remove_thymio="marker")
+            if not ret:
+                print("No thymio")
+                continue
+            ret, img, pos_g = self.findGoal(img)
+            if not ret:
+                print("No goal")
+                continue
+            img_2 = self.applyPreprocessing(img)
+            polygons = self.getContourPolygons(img_2, buffer_mm = 150)
+            _,adj_matrix,polypoints = self.visibilityGraph(polygons, thymio_pose=pos, goal_pose=pos_g)
+            try:
+                adj_matrix1 = np.copy(adj_matrix)
+                polypoints1 = np.copy(polypoints)
+                points = dijkstra(adj_matrix1, polypoints1)
+            except Exception as e:
+                print("Could not find optimal path!")
+                continue
+            return points
+
 if __name__ == "__main__":
     v = Vision(1)
     for i in range(10):
