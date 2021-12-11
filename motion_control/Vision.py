@@ -31,7 +31,7 @@ class Vision:
         self.vid.set(cv.CAP_PROP_FRAME_HEIGHT, 1080)
 
 
-        self.threshold = 10
+        self.threshold = 60
         self.obstacle = MultiPolygon()
         self.warp_transform = None
         with open("D:\EPFL\Basics of Mobile Robotics\mobile_robotics_project\motion_control\calibration.yaml", "r") as calib_file:
@@ -277,7 +277,7 @@ class Vision:
         #print(pos)
 
         img_2 =self.applyPreprocessing(img)
-        polygons =self.getContourPolygons(img_2, buffer_mm = 100)
+        polygons =self.getContourPolygons(img_2, buffer_mm = 250)
         potential_segments,adj_matrix,polypoints =self.visibilityGraph(polygons, thymio_pose=pos, goal_pose=pos_g)
 
         try:
@@ -297,6 +297,7 @@ if __name__ == "__main__":
     #v.autoTuneThreshold(verbose=True)
     
     print("AT")
+    
     while True:
         img_orig = v.acquireImg(True)
         img_orig = cv.resize(img_orig, (1920, 1080))
@@ -321,7 +322,7 @@ if __name__ == "__main__":
         #print(pos)
         
         img_2 = v.applyPreprocessing(img)
-        polygons = v.getContourPolygons(img_2, buffer_mm = 100)
+        polygons = v.getContourPolygons(img_2, buffer_mm = 70)
         potential_segments,adj_matrix,polypoints = v.visibilityGraph(polygons, thymio_pose=pos, goal_pose=pos_g)
         
         try:

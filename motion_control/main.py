@@ -1,3 +1,5 @@
+from matplotlib.pyplot import plot
+import matplotlib.pyplot as plt
 from numpy.lib.type_check import imag
 from Vision import Vision
 
@@ -45,9 +47,7 @@ if __name__ == '__main__':
     v = Vision(1)
     pose, image = thymioPosePipeline(v)
 
-    # initialization of
-    # astolfi = Astolfi()
-    # simp = SimpleController()
+    # initialization of controller
     cont = Controller()
     #preparing global path
     flag = False
@@ -55,14 +55,13 @@ if __name__ == '__main__':
         temp = v.prepareWaypoints()
         if temp is not None:
             angle = temp[0]
-            trajectory =temp[1]
+            trajectory = temp[1]
             flag = True
 
-    
+    # trajectory = [[300,200],[800,200],[300,200],[200,200]]
     # setting global path
-    # simp.set_global(trajectory,np.deg2rad(angle))
-    # astolfi.set_path(trajectory,np.deg2rad(angle))
-    cont.set_global(trajectory,np.deg2rad(angle),verbose=True)
+
+    cont.set_global(trajectory,cont.normalize_ang(np.deg2rad(angle)),verbose=True)
     # set up kalman filter
     angle = np.deg2rad(pose[2])
     vl = 2
@@ -87,6 +86,8 @@ if __name__ == '__main__':
     aw(node.set_variables(motors(vl,vr)))
     i=0
     state = 'TURN'
+    aw(node.set_variables(motors(0,0)))
+    pos=[]
     while cont.on_goal==False:
         time.sleep(0.2) 
         state_vector = np.append(state_vector, [filter.get_state_vector()], axis=0)
@@ -95,41 +96,25 @@ if __name__ == '__main__':
         # calc. second std: probability is more than 95% that robot is inside second std
         eigenvalues, _ = np.linalg.eig(uncertainty_matrix[i+1])
         stds2 = 2*np.sqrt(np.absolute(eigenvalues))
+        #taking current state of the robot
         curr = filter.get_state_vector().copy()
-        curr[2]=curr[2]%(2*math.pi)
-        #setting current position
-        # simp.set_curr(curr[0:3].copy())
-        # astolfi.set_curr(curr[0:3].copy())
+        curr[2]=cont.normalize_ang(curr[2])
         cont.set_curr(curr[0:3].copy())
-        #correcting heading
-        # error = ((simp.next[2]-simp.curr[2] + np.pi) % (2 * np.pi) - np.pi)
+        temp.append([curr])
+        # #to test with dummy trajectory
+        # if i==0: 
+        #     temp=[[curr[0],curr[1]]]
+        #     j=0
+        #     while len(temp)<len(trajectory)+1:
+        #         temp.append(trajectory[j])
+        #         j+=1
+        #     cont.set_global(temp,np.deg2rad(angle),verbose=True)
 
-        cont.motion_control(node, astolfi=True, verbose=True)
+       
+        print('***********',cont.next, cont.curr)
+        cont.motion_control(node, fkine=False ,astolfi=True, verbose=True)
 
-        
-        # dist = astolfi.norm(simp.curr-simp.next)
-        # if abs(error) > simp.heading_th:
-        #     vl,vr = simp.correct_heading(error)
-        #     aw(node.set_variables(motors(vl,vr)))
-        # else:
-        #     rho,alpha,beta = astolfi.polar_rep()
-        #     print(dist)
-        #     vl,vr = simp.follow_line(dist,error)
-        #     aw(node.set_variables(motors(vl,vr)))
-        #     simp.check_node()
-        #     # vl,vr = simp.correct_heading(error)
-        #     aw(node.set_variables(motors(vl,vr)))
-        #     astolfi.set_goal(simp.get_goal())
-        #     astolfi.check_nodes(verbose=True)
-        # #print(rho)
-        # if astolfi.rho < 10000000000:
-            
-        # elif astolfi.rho >= 2000:      
-        #     vl,vr = astolfi.compute_phi_dot()
-        #     aw(node.set_variables(motors(vl,vr)))
-        #     simp.set_goal(astolfi.get_goal())
-
-
+    
         
         if np.amax(stds2) > 3:
             aw(node.set_variables(motors(0,0)))
@@ -148,14 +133,20 @@ if __name__ == '__main__':
             t1.start()
             aw(node.set_variables(motors(vl,vr)))
 
+        pos.append(cont.curr)
         i+=1
         
-        
+    temp=np.array(temp)
     aw(node.set_variables(motors(0,0)))
     print('****GOAL IS REACHED****')
     t1.stop()
-
-
+    path=cont.path
+    pos=np.array(pos)
+    plt.subplots()
+    plt.plot(path[:,0], path[:,1],'r*')
+    plt.plot(path[:,0], path[:,1],'r--')
+    plt.plot(pos[:,0],pos[:,1],'b')
+    
     PlotMap(period, state_vector, uncertainty_matrix, image, [int(Vision.GROUND_X_RANGE_MM / 10), int(Vision.GROUND_Y_RANGE_MM / 10)])
-
+    plt.show()
     
