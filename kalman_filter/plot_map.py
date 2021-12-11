@@ -14,7 +14,7 @@ class PlotMap():
         self._plot()
 
     def _plot(self):
-        fig, ax = plt.subplots(ncols=2, figsize=(8,7))
+        fig, ax = plt.subplots(ncols=2, figsize=(10,6))
 
         uncertainty = [] # list that contains the largest uncertainty of each time step
         for i, position in enumerate(self.position_list):
@@ -30,16 +30,27 @@ class PlotMap():
             ax[0].add_patch(ell)
 
             # plot center point of Thymio
-            ax[0].scatter(position[0], position[1], color="b")        
+            ax[0].scatter(position[0], position[1], color="b")
+
+            # plot time step beside the points
+            ax[0].text(position[0], position[1], str(i), fontsize=12)     
         ax[0].set_title("Position of Thymio")
         ax[0].set_xlabel("x axis [cm]")
         ax[0].set_ylabel("y axis [cm]")
+        ax[0].set_xlim([-2, 20])
+        ax[0].set_ylim([-2, 20])
+
+        # create x axis for uncertainty plot
+        time = [i for i in range(len(uncertainty))]
+        time = np.array(time, dtype=float)*self.period
 
         # plot uncertainty in fct. of time
-        ax[1].plot(uncertainty)
+        ax[1].plot(time, uncertainty)
         ax[1].axis("equal")
-        ax[1].set_title("Positional uncertainty (largest second standard deviation)")
+        ax[1].set_title("Positional uncertainty")
         ax[1].set_xlabel("time [s]")
-        ax[1].set_ylabel("uncertainty [cm]")
+        ax[1].set_ylabel("max. second std [cm]")
+        ax[1].set_ylim([-1, 4])
+        ax[1].set_xlim([0, len(time)*self.period])
 
         plt.show()

@@ -25,8 +25,8 @@ class KalmanFilter():
         # positional measurement (measured by picture): [position x, position y, angel]
         self.m_pos = np.zeros((3), dtype=float)
 
-        self.m_pos_noise = 0.01 # variance of positional measurement in x and y direction
-        self.m_angular_noise = 0.003 # variance of angular pose measurement
+        self.m_pos_noise = 0.01 # variance of positional measurement in x and y direction (estimated variance of camera)
+        self.m_angular_noise = 0.003 # variance of angular pose measurement (estimated variance of camera)
         self.m_speed_noise = 2 # variance of speed measurement
         self.p_speed_noise = 0.4 # variance of speed during processing
 
@@ -102,6 +102,7 @@ class KalmanFilter():
             # low value) and as consequence, the cash is updated. This is not a good solution! However, it is working and because of time constraints 
             # is was not improved.
             aw(self.node.wait_for_variables())
+            aw(self.node.set_variables({"leds.top":[0,0,10]}))
             left = self._convert_speed_to_cm(self.node["motor.left.speed"])
             right = self._convert_speed_to_cm(self.node["motor.right.speed"])          
             return [left, right]
@@ -230,7 +231,7 @@ if __name__ == '__main__':
     # define initiale state vector: [position x, position y, angle, velocity x, velocity y, angular velocity]
     state_vector = np.array([[0,0,angle,vx,vy,0]], dtype=float)
 
-    # define initiale covariance matrix
+    # define initiale covariance matrix, for the estimated variance of the camera is taken
     uncertainty_matrix = np.array([[[0.01,0,0,0,0,0],
                                     [0,0.01,0,0,0,0],
                                     [0,0,0.03,0,0,0],
@@ -258,7 +259,7 @@ if __name__ == '__main__':
     # main loop
     for i in range(4):
         # wait for a certain time until main requests next update from the kalman filter
-        time.sleep(1)
+        time.sleep(0.5)
 
         # get estimated position (state_vector) and uncertainty (covariance matrix) from kalman filter
         state_vector = np.append(state_vector, [filter.get_state_vector()], axis=0)
@@ -290,4 +291,4 @@ if __name__ == '__main__':
     t1.stop()
 
     # plot results
-    PlotMap(period=1, position_list=state_vector, cov_list=uncertainty_matrix)
+    PlotMap(period=0.5, position_list=state_vector, cov_list=uncertainty_matrix)
