@@ -166,7 +166,6 @@ class Vision:
             for new_wp in new_wps:
                 if new_wp[0] > 0 and new_wp[0] < Vision.GROUND_X_RANGE_MM and new_wp[1] > 0  and new_wp[1] < Vision.GROUND_Y_RANGE_MM:
                     potential_wp.append(new_wp)
-            potential_wp = potential_wp + list(np.asarray(np.dstack(tuple(obstacle_polygon.exterior.xy)))[0])
         if goal_pose is not None:
             potential_wp =  potential_wp + [np.asarray(goal_pose[:2])]
         if thymio_pose is not None:
