@@ -14,9 +14,9 @@ import os
 import time
 from a_star import dijkstra
 class Vision:
-    GROUND_X_RANGE_MM = 1050
-    GROUND_Y_RANGE_MM = 480
-    BINARIZATION_THRESHOLD = 40
+    GROUND_X_RANGE_MM = 1600
+    GROUND_Y_RANGE_MM = 1200
+    BINARIZATION_THRESHOLD = 50
     THYMIO_HEIGHT_MM = 65
     THYMIO_LENGTH_MM = 130
     THYMIO_WIDTH_MM = 130
@@ -286,7 +286,7 @@ class Vision:
             return points
     
     def getThymioPose(self):
-        while True:
+        for _ in range(5):
             for _ in range(5):
                 img_orig = self.acquireImg(True)
             img_orig = cv.resize(img_orig, (1920, 1080))
@@ -298,13 +298,14 @@ class Vision:
             ret, _, pos = self.findThymio(img, 4, remove_thymio="marker")
             if ret:
                 return [pos[0] / 10, pos[1] / 10, pos[2]], img
+        return False, False
 
 if __name__ == "__main__":
     v = Vision(1)
     for i in range(10):
         v.acquireImg()
         time.sleep(0.3)
-   # v.autoTuneThreshold(verbose=True)
+    # v.autoTuneThreshold(verbose=True)
     
     print("AT")
     while True:
@@ -346,8 +347,10 @@ if __name__ == "__main__":
         view_2 = v.prepareForVisualization(img, thymio_pose=pos, goal_pos=pos_g,polygons=polygons,visibility_graph=[adj_matrix,polypoints],optimal_path=points)
         cv.imshow("TEST", np.hstack([view_2]))
         ret = cv.waitKey(10)
+        input(img.shape)
         if ret== ord("q"):
             break
+
         elif ret == ord("s"):
             time_now = time.time()
             cv.imwrite("img_orig_{}.png".format(time_now), img_orig)
