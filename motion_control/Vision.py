@@ -332,7 +332,7 @@ if __name__ == "__main__":
         #print(pos)
         
         img_2 = v.applyPreprocessing(img)
-        polygons = v.getContourPolygons(img_2, buffer_mm = 100)
+        polygons = v.getContourPolygons(img_2, buffer_mm = 120)
         potential_segments,adj_matrix,polypoints = v.visibilityGraph(polygons, thymio_pose=pos, goal_pose=pos_g)
         
         try:
