@@ -1,16 +1,16 @@
 from matplotlib.pyplot import plot
 import matplotlib.pyplot as plt
 from numpy.lib.type_check import imag
-from Vision import Vision
+from functions.Vision import Vision
 import math
 import numpy as np
 import time
 from tdmclient import ClientAsync, aw
-from kalman_filter import KalmanFilter
-from repeated_timer import RepeatedTimer
-from plot_map import PlotMap
+from functions.kalman_filter import KalmanFilter
+from functions.repeated_timer import RepeatedTimer
+from functions.plot_map import PlotMap
 import cv2 as cv
-from Controller import Controller
+from functions.Controller import Controller
 
 def RoboMove():
         # set up connection to thymio, if node=0 no thymio is connected

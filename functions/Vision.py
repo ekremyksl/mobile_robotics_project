@@ -8,7 +8,7 @@ from shapely.geometry.multipoint import MultiPoint
 import cv2.aruco as aruco
 import yaml
 import time
-from a_star import dijkstra
+from functions.a_star import dijkstra
 
 class Vision:
     GROUND_X_RANGE_MM = 1450
