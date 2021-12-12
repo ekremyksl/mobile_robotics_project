@@ -6,20 +6,20 @@ import math
 import cv2 as cv
 
 class PlotMap():
-    def __init__(self, period, position_list, cov_list, img, range_cm):
+    def __init__(self, period, position_list, cov_list, img):
         self.period = period # period of data of position_list
-        self.position_list = position_list # position at each time step: list of [x position, y position]
-        self.cov_list =cov_list # list of covariance matrices between x and y position
-        self.img = img
-        self.range_cm = range_cm
+        self.position_list = position_list*10 # position at each time step: list of [x position, y position]
+        self.cov_list =cov_list*100 # list of covariance matrices between x and y position
+        self.img = cv.flip(img, 0)
 
         # create plot
         self._plot()
 
     def _plot(self):
-        fig, ax = plt.subplots(ncols=2, figsize=(8,7))
-        img = cv.resize(self.img,self.range_cm)
+        fig, ax = plt.subplots(nrows=2, figsize=(8,7))
+        
         ax[0].imshow(self.img)
+        ax[0].axis("equal")
         uncertainty = [] # list that contains the largest uncertainty of each time step
         for i, position in enumerate(self.position_list):
             # calc. eigenvalues and eigenvectors to determine the absolute value and the direction of the variance of the uncertainty
@@ -38,8 +38,8 @@ class PlotMap():
 
             ax[0].text(position[0], position[1], str(i), fontsize=12)     
         ax[0].set_title("Position of Thymio")
-        ax[0].set_xlabel("x axis [cm]")
-        ax[0].set_ylabel("y axis [cm]")
+        ax[0].set_xlabel("x axis [mm]")
+        ax[0].set_ylabel("y axis [mm]")
 
         # plot uncertainty in fct. of time
         ax[1].plot(uncertainty)

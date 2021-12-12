@@ -27,19 +27,19 @@ if __name__ == '__main__':
     pose, image = v.getThymioPose()
 
     # initialization of controller
-    cont = Controller()
+    cont = Controller(node)
     #preparing global path
     flag = False
     while flag==False:
         temp = v.getTrajectory()
         if temp is not None:
-            angle = temp[0]
-            trajectory = temp[1]
+            angle = pose[2]
+            trajectory = temp
             flag = True
 
 
     # setting global path
-    cont.set_global(trajectory, cont.normalize_ang(np.deg2rad(angle)),conversion='cm2cm',verbose=True)
+    cont.set_global(trajectory, cont.normalize_ang(np.deg2rad(angle)),conversion='mm2cm',verbose=True)
     # set up kalman filter
     angle = np.deg2rad(pose[2])
     vl = 2
@@ -66,6 +66,8 @@ if __name__ == '__main__':
     state = 'TURN'
     aw(node.set_variables(cont.motors(0,0)))
     pos=[]
+    phi_dot=[]
+    pba=[]
     while cont.on_goal==False:
         time.sleep(0.2) 
         state_vector = np.append(state_vector, [filter.get_state_vector()], axis=0)
@@ -79,15 +81,16 @@ if __name__ == '__main__':
         curr[2]=cont.normalize_ang(curr[2])
         cont.set_curr(curr[0:3].copy())
 
-        cont.motion_control(node, fkine=False ,astolfi=True, verbose=True)
-
+        cont.motion_control(fkine=False ,astolfi=True, verbose=True)
+        phi_dot.append([cont.phiL,cont.phiR])
+        pba.append([cont.rho,cont.alpha,cont.beta])
     
         
         if np.amax(stds2) > 3:
-            aw(node.set_variables(cont.motors(0,0)))
+            aw(node.set_variables(cont.motors(0.5,0.5)))
             t1.stop()
             print("taking picture at {}".format(i))
-            pose, _ = v.getThymioPose(v)
+            pose, _ = v.getThymioPose()
 
 
             print("second stds: {}".format(stds2))
@@ -109,10 +112,23 @@ if __name__ == '__main__':
     t1.stop()
     path=cont.path
     pos=np.array(pos)
+    pba=np.array(pba)
+    phi_dot=np.array(phi_dot)
     plt.subplots()
     plt.plot(path[:,0], path[:,1],'r*')
     plt.plot(path[:,0], path[:,1],'r--')
-    plt.plot(pos[:,0],pos[:,1],'b')    
-    PlotMap(period, state_vector, uncertainty_matrix, image, [int(Vision.GROUND_X_RANGE_MM / 10), int(Vision.GROUND_Y_RANGE_MM / 10)])
+    plt.plot(pos[:,0],pos[:,1],'b')
+    plt.ylabel('Y')
+    plt.xlabel('X')    
+    plt.subplot()
+    plt.plot(phi_dot[:,0],'b')
+    plt.plot(phi_dot[:,1],'r')
+    plt.xlabel('time')
+    plt.ylabel('$\dot\phi$')
+    plt.legend()
+    plt.plot(pba[:,0],'b')
+    plt.plot(pba[:,1],'g')
+    plt.plot(pba[:,2],'r')
+    # PlotMap(period, state_vector, uncertainty_matrix, image)
     plt.show()
     

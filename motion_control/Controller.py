@@ -10,7 +10,7 @@ from tdmclient import ClientAsync, aw
 
 class Controller:
 
-    def __init__(self):
+    def __init__(self,node=None):
         '''
         Constructer of the Thymio Robot which contains following parameters
         lspeed : left wheel motor speed, as default set to 100]
@@ -24,7 +24,8 @@ class Controller:
         self.alpha = 0
         self.beta = 0
 
-        self.state = 'PASS'     #initial state of Thymio
+        self.state = 'HEADING'     #initial state of Thymio
+        self.node = node
 
         #entering initial parameters
         self.wheel_radius = ut.THYMIO_PARAMS['WHEEL_RAD']          #wheel radius of thymio [cm]
@@ -36,8 +37,7 @@ class Controller:
 
         #defining thresholds for controller
         self.on_node = ut.THRESHOLDS['ON_NODE']
-        self.heading_th = ut.SIMPLE_CONT['HEADING_THRESHOLD']  #sensory threshold for obstacle avoidance
-        self.dist_th    = ut.SIMPLE_CONT['DISTANCE_THRESHOLD']             #threshold to determine if we are on the node
+        self.heading_th = ut.THRESHOLDS['HEADING_THRESHOLD']  #sensory threshold for obstacle avoidance
         self.obst_th_low = ut.THRESHOLDS['OBSTACLE_TH_LOW']     #obstacle lower threshold 
         self.obst_th_high = ut.THRESHOLDS['OBSTACLE_TH_HIGH']   #obstacle high threshold
 
@@ -121,7 +121,6 @@ class Controller:
         j=1
         while j < len(traj):
             delta = self.delt(traj[j-1], traj[j])   #distance vector between two consecutive nodes
-            print('######delta vector is:',delta)
             ang = m.atan2(delta[1], delta[0])
             path.append([traj[j][0], traj[j][1], ang])
             j+=1
@@ -197,13 +196,13 @@ class Controller:
         return self.phiL, self.phiR
 
     def get_sensoryprox(self):
-        aw(node.wait_for_variables({"prox.horizontal"}))
-        obst = [node["prox.horizontal"][0], node["prox.horizontal"][4]]
+        aw(self.node.wait_for_variables({"prox.horizontal"}))
+        obst = [self.node["prox.horizontal"][0], self.node["prox.horizontal"][4]]
 
         return obst
 
     def obstacle_aviodance(self,obst):
-        speed0 = 100
+        speed0 = 50
         obstSpeedGain = 5
 
         leds_top = [30,30,30]
@@ -213,16 +212,27 @@ class Controller:
 
         return vl,vr
 
-    def motion_control(self, node, astolfi=False, verbose=False, fkine=False):
+    def motion_control(self, astolfi=False, verbose=False, fkine=False):
 
         self.polar_rep()
         obst = self.get_sensoryprox()
 
-        self.state = 'PASS'
+        
         if verbose:
             print('Orientation error is:', self.alpha)
             print('Distance from the next node is:', self.rho)
         #deciding the state of the robot
+
+        
+        #should it correct heading
+        if abs(self.alpha) > (m.pi/4): #Astolfi is able to control it if alpha is in [-pi/2,pi/2]
+            self.state = 'HEADING'               #but as a safety margin, we take 0.95(pi/2) as threshold for heading correction
+        #or should it follow the trajectory with Astolfi
+        elif abs(self.alpha) and astolfi is not False:
+            self.state = 'ASTOLFI' 
+        #or do nothing and stop the robot at the moment for safety 
+        else:
+            self.state = 'PASS'
 
         if self.state != 'AVOIDANCE': 
             # switch from goal tracking to obst avoidance if obstacle detected
@@ -231,16 +241,7 @@ class Controller:
         elif self.state == 'AVOIDANCE':
             if obst[0] < self.obst_th_low and obst[1] < self.obst_th_low:
                 # switch from obst avoidance to goal tracking if obstacle got unseen
-                self.state = 'PASS' 
-        #should it correct heading
-        elif abs(self.alpha) > 0.95*(m.pi/2): #Astolfi is able to control it if alpha is in [-pi/2,pi/2]
-            self.state = 'HEADING'               #but as a safety margin, we take 0.95(pi/2) as threshold for heading correction
-        #or should it follow the trajectory with Astolfi
-        elif abs(self.alpha) and astolfi is not False:
-            self.state = 'ASTOLFI' 
-        #or do nothing and stop the robot at the moment for safety 
-        else:
-            self.state = 'PASS'
+                self.state = 'ASTOLFI' 
 
         if verbose: print('Current State is', self.state)
         #depending on the state, determine the action of robot
@@ -251,12 +252,13 @@ class Controller:
         elif self.state == 'ASTOLFI':
             vl,vr = self.compute_phi_dot(fkine=fkine,verbose=verbose)
         else:
-            vl=0.5
-            vr=0.5
+            vl=0.0
+            vr=0.0
 
 
         #send inputs to Thymio
-        aw(node.set_variables(self.motors(vl,vr)))
+        aw(self.node.set_variables(self.motors(vl,vr)))
+        if self.state == 'AVOIDANCE': time.sleep(0.5)
         #check if next goal or even global goal is reached
         self.check_node()
 
@@ -266,9 +268,9 @@ if __name__ == '__main__':
         trajectory = [(0.0,0.0), (50.0,40.0), (70.0,80.0),(0.0, 80.0), (0.0, 0.0)]        
 
         # set up connection to thymio, if node=0 no thymio is connected
-        client = ClientAsync()
-        node = aw(client.wait_for_node())
-        aw(node.lock())
+        # client = ClientAsync()
+        # node = aw(client.wait_for_node())
+        # aw(node.lock())
 
         cont = Controller()
 
@@ -278,22 +280,44 @@ if __name__ == '__main__':
         curr[2]=cont.normalize_ang(curr[2])
         cont.set_curr(curr[0:3])
         pos=[]
+        pba=[]
+        phi_dot=[]
         while cont.on_goal==False:
             time.sleep(0.2)            
 
-            cont.motion_control(node, astolfi=False,fkine=True, verbose=True)
+            cont.motion_control(astolfi=False,fkine=True, verbose=True)
             i+=1
             pos.append([cont.curr])
+            phi_dot.append([cont.phiL,cont.phiR])
+            pba.append([cont.rho,cont.alpha,cont.beta])
+               
 
         
         print('****GOAL IS REACHED****')
 
         pos=np.array(pos)
+        path=cont.path
+        pos=np.array(pos)
+        pba=np.array(pba)
+        phi_dot=np.array(phi_dot)
         plt.subplots()
+        plt.plot(path[:,0], path[:,1],'r*')
+        plt.plot(path[:,0], path[:,1],'r--')
         plt.plot(pos[:,0],pos[:,1],'b')
-        plt.plot(cont.path[:,0], cont.path[:,1])
+        plt.ylabel('Y')
+        plt.xlabel('X')    
+        plt.subplot()
+        plt.plot(phi_dot[:,0],'b')
+        plt.plot(phi_dot[:,1],'r')
+        plt.xlabel('time')
+        plt.ylabel('$\dot\phi$')
+        plt.legend()
+        plt.plot(pba[:,0],'b')
+        plt.plot(pba[:,1],'g')
+        plt.plot(pba[:,2],'r')
+        # PlotMap(period, state_vector, uncertainty_matrix, image)
         plt.show()
-
+        
 
 
             
