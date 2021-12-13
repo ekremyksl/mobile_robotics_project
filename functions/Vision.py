@@ -8,12 +8,12 @@ from shapely.geometry.multipoint import MultiPoint
 import cv2.aruco as aruco
 import yaml
 import time
-from functions.a_star import dijkstra
+from a_star import dijkstra
 
 class Vision:
-    GROUND_X_RANGE_MM = 1450
-    GROUND_Y_RANGE_MM = 700
-    BINARIZATION_THRESHOLD = 60
+    GROUND_X_RANGE_MM = 1800
+    GROUND_Y_RANGE_MM = 1300
+    BINARIZATION_THRESHOLD = 30
     THYMIO_HEIGHT_MM = 65
     THYMIO_LENGTH_MM = 130
     THYMIO_WIDTH_MM = 130
@@ -36,7 +36,7 @@ class Vision:
         self.obstacle = MultiPolygon()
         
         # Load camera calibration and check that it has the correct format
-        with open("./Vision/calibration.yaml", "r") as calib_file:
+        with open("./calibration.yaml", "r") as calib_file:
             self.camera_calibration = yaml.load(calib_file)
         assert isinstance(self.camera_calibration, dict)
         assert set(self.camera_calibration.keys()) == {"distortion", "matrix"}
@@ -326,6 +326,7 @@ if __name__ == "__main__":
         ret, img, warp = v.extractWarp(img_orig)
         if not ret:
             continue
+        img = v.applyWarp(img,warp)
         ret, img, pos = v.findThymio(img, 4, remove_thymio="marker")
         if not ret:
             continue
@@ -344,7 +345,7 @@ if __name__ == "__main__":
             points = None
         view_1 = v.prepareForVisualization(cv.cvtColor(img_2, cv.COLOR_GRAY2BGR), thymio_pose=pos, goal_pos=pos_g,polygons=polygons,visibility_graph=[adj_matrix,polypoints],optimal_path=points)
         view_2 = v.prepareForVisualization(img, thymio_pose=pos, goal_pos=pos_g,polygons=polygons,visibility_graph=[adj_matrix,polypoints],optimal_path=points)
-        cv.imshow("Threshold calibration - Press 'q' to quit and 's' to store current result", np.hstack([view_1, view_2]))
+        cv.imshow("Threshold calibration - Press 'q' to quit and 's' to store current result", np.hstack([view_2]))
         ret = cv.waitKey(10)
         if ret== ord("q"):
             break

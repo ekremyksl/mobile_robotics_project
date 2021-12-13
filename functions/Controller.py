@@ -2,8 +2,8 @@ from cv2 import norm
 import numpy as np
 import math as m
 import matplotlib.pyplot as plt
-import functions.utilities as ut
-from functions.Thymio import Thymio
+import utilities as ut
+from Thymio import Thymio
 import time
 import serial
 from tdmclient import ClientAsync, aw

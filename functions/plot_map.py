@@ -5,16 +5,18 @@ import matplotlib.animation as animation
 import math
 
 class PlotMap():
-    def __init__(self, period, position_list, cov_list):
+    def __init__(self, period, position_list, cov_list, path):
         self.period = period # period of data of position_list
         self.position_list = position_list # position at each time step: list of [x position, y position]
         self.cov_list =cov_list # list of covariance matrices between x and y position
+        self.path = path
 
         # create plot
         self._plot()
 
     def _plot(self):
         fig, ax = plt.subplots(ncols=2, figsize=(10,6))
+        
 
         uncertainty = [] # list that contains the largest uncertainty of each time step
         for i, position in enumerate(self.position_list):
@@ -39,6 +41,10 @@ class PlotMap():
         ax[0].set_ylabel("y axis [cm]")
         ax[0].set_xlim([-2, 20])
         ax[0].set_ylim([-2, 20])
+        ax[0].plot(self.path[:,0], self.path[:,1],'r*-',label='optimal trajectory')
+        ax[0].plot(self.path[0,0], self.path[0,1],'rv',label='start')
+        ax[0].plot(self.path[-1,0], self.path[-1,1],'r^',label='goal')
+        ax[0].plot(self.path[:,0], self.path[:,1],'r--')
 
         # create x axis for uncertainty plot
         time = [i for i in range(len(uncertainty))]

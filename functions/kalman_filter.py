@@ -2,8 +2,8 @@ import math
 import time
 import numpy as np
 from tdmclient import ClientAsync, aw
-from functions.repeated_timer import RepeatedTimer
-from functions.plot_map import PlotMap
+from repeated_timer import RepeatedTimer
+from plot_map import PlotMap
 
 class KalmanFilter():
     def __init__(self, node, period, state_vector, position_uncertainty, print_variables=False):
